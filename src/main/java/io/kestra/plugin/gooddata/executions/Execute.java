@@ -1,30 +1,36 @@
 package io.kestra.plugin.gooddata.executions;
 
+import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.kestra.core.http.HttpRequest;
+import io.kestra.core.http.HttpResponse;
 import io.kestra.core.models.annotations.Example;
 import io.kestra.core.models.annotations.Plugin;
+import io.kestra.core.models.annotations.PluginProperty;
 import io.kestra.core.models.property.Property;
 import io.kestra.core.models.tasks.RunnableTask;
+import io.kestra.core.models.tasks.common.FetchType;
 import io.kestra.core.runners.RunContext;
 import io.kestra.plugin.gooddata.AbstractGooddata;
 import io.swagger.v3.oas.annotations.media.Schema;
+import jakarta.validation.constraints.NotNull;
 import lombok.*;
 import lombok.experimental.SuperBuilder;
 import org.slf4j.Logger;
 
 import java.io.ByteArrayInputStream;
 import java.net.URI;
-import java.net.http.HttpClient;
-import java.net.http.HttpRequest;
-import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
+import java.time.Duration;
+import java.util.List;
+import java.util.concurrent.TimeoutException;
 
 /**
  * Kestra task that executes an AFM (Analytical Framework Model) query against a GoodData workspace.
  *
- * <p>Calls {@code POST /api/v1/actions/workspaces/{workspaceId}/execution/afm/execute}
- * with a user-supplied raw JSON AFM body, stores the response, and returns the execution result ID.</p>
+ * <p>Posts the AFM query to GoodData, polls the resulting executionResult endpoint until complete,
+ * and fetches or stores the computed tabular result according to the configured {@code fetchType}.</p>
  */
 @SuperBuilder
 @ToString
@@ -35,13 +41,12 @@ import java.nio.charset.StandardCharsets;
     title = "Execute a GoodData AFM analytics query",
     description = "Posts an AFM (Analytical Framework Model) request to "
         + "`POST /api/v1/actions/workspaces/{workspaceId}/execution/afm/execute`. "
-        + "The caller supplies the complete AFM JSON body. "
-        + "Returns the execution result ID and stores the full response JSON."
+        + "Polls the execution result until completion and handles the result according to `fetchType`."
 )
 @Plugin(
     examples = {
         @Example(
-            title = "Execute a GoodData AFM query",
+            title = "Execute a GoodData AFM query and store the result",
             full = true,
             code = """
                 id: executions_execute
@@ -53,6 +58,7 @@ import java.nio.charset.StandardCharsets;
                     url: "https://acme.cloud.gooddata.com"
                     apiToken: "{{ secret('GOODDATA_TOKEN') }}"
                     workspaceId: "my-workspace-id"
+                    fetchType: STORE
                     afmRequest: |
                       {
                         "execution": {
@@ -87,69 +93,181 @@ public class Execute extends AbstractGooddata implements RunnableTask<Execute.Ou
         title = "Workspace ID",
         description = "The identifier of the GoodData workspace to execute the AFM query against."
     )
+    @NotNull
+    @PluginProperty(group = "main")
     private Property<String> workspaceId;
 
     @Schema(
         title = "AFM request JSON",
-        description = "The complete AFM (Analytical Framework Model) request body as a raw JSON string. "
-            + "Must conform to the GoodData AFM execute API schema."
+        description = "The complete AFM (Analytical Framework Model) request body as a raw JSON string."
     )
+    @NotNull
+    @PluginProperty(group = "main")
     private Property<String> afmRequest;
+
+    @Schema(
+        title = "Fetch type",
+        description = "How to process execution results: STORE (store raw JSON in Kestra storage), "
+            + "FETCH (return all result rows), FETCH_ONE (return first row), or NONE."
+    )
+    @Builder.Default
+    @PluginProperty(group = "processing")
+    private Property<FetchType> fetchType = Property.of(FetchType.STORE);
+
+    @Schema(
+        title = "Poll interval",
+        description = "Interval between polling requests when waiting for AFM execution completion."
+    )
+    @Builder.Default
+    @PluginProperty(group = "processing")
+    private Property<Duration> pollInterval = Property.of(Duration.ofSeconds(1));
 
     @Override
     public Output run(RunContext runContext) throws Exception {
         Logger logger = runContext.logger();
 
-        String renderedUrl     = runContext.render(url).as(String.class).orElseThrow(
-            () -> new IllegalArgumentException("'url' must be provided"));
-        String renderedToken   = runContext.render(apiToken).as(String.class).orElseThrow(
-            () -> new IllegalArgumentException("'apiToken' must be provided"));
-        String renderedWsId    = runContext.render(workspaceId).as(String.class).orElseThrow(
+        String baseUrl       = validateAndNormalizeUrl(runContext.render(url).as(String.class).orElseThrow(
+            () -> new IllegalArgumentException("'url' must be provided")));
+        String renderedToken = getRenderedApiToken(runContext);
+        String renderedWsId  = runContext.render(workspaceId).as(String.class).orElseThrow(
             () -> new IllegalArgumentException("'workspaceId' must be provided"));
-        String renderedAfm     = runContext.render(afmRequest).as(String.class).orElseThrow(
+        String renderedAfm   = runContext.render(afmRequest).as(String.class).orElseThrow(
             () -> new IllegalArgumentException("'afmRequest' must be provided"));
 
-        String baseUrl     = renderedUrl.replaceAll("/+$", "");
-        String executeUrl  = baseUrl + "/api/v1/actions/workspaces/" + renderedWsId
-            + "/execution/afm/execute";
-        logger.info("Executing AFM query at {}", executeUrl);
-        logger.debug("AFM request body: {}", renderedAfm);
+        FetchType renderedFetchType = this.fetchType != null
+            ? runContext.render(this.fetchType).as(FetchType.class).orElse(FetchType.STORE)
+            : FetchType.STORE;
 
-        HttpClient client = HttpClient.newBuilder().build();
-        HttpRequest request = HttpRequest.newBuilder()
+        Duration renderedTimeout = this.timeout != null
+            ? runContext.render(this.timeout).as(Duration.class).orElse(Duration.ofSeconds(60))
+            : Duration.ofSeconds(60);
+
+        Duration renderedPollInterval = this.pollInterval != null
+            ? runContext.render(this.pollInterval).as(Duration.class).orElse(Duration.ofSeconds(1))
+            : Duration.ofSeconds(1);
+
+        String encodedWsId = encodePath(renderedWsId);
+        String executeUrl  = baseUrl + "/api/v1/actions/workspaces/" + encodedWsId + "/execution/afm/execute";
+        logger.info("Executing GoodData AFM query at {}", executeUrl);
+
+        HttpRequest executeRequest = HttpRequest.builder()
             .uri(URI.create(executeUrl))
-            .header("Authorization", "Bearer " + renderedToken)
-            .header("Content-Type", "application/json")
-            .POST(HttpRequest.BodyPublishers.ofString(renderedAfm))
+            .method("POST")
+            .addHeader("Authorization", "Bearer " + renderedToken)
+            .addHeader("Content-Type", "application/json")
+            .addHeader("Accept", "application/json")
+            .body(HttpRequest.StringRequestBody.builder()
+                .content(renderedAfm)
+                .contentType("application/json")
+                .charset(StandardCharsets.UTF_8)
+                .build())
             .build();
 
-        HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
+        HttpResponse<String> executeResponse = executeRequest(runContext, executeRequest);
+        String executeJson = executeResponse.getBody() != null ? executeResponse.getBody() : "{}";
 
-        if (response.statusCode() < 200 || response.statusCode() >= 300) {
-            throw new RuntimeException(
-                "GoodData AFM execute API returned HTTP " + response.statusCode()
-                    + ": " + response.body());
-        }
-
-        String rawJson = response.body();
-        logger.debug("AFM execute raw response: {}", rawJson);
-
-        // Extract execution result ID from response:
-        // {"executionResponse":{"links":{"executionResult":"..."}}}
-        JsonNode root = MAPPER.readTree(rawJson);
-        String executionResultId = root.path("executionResponse")
+        JsonNode executeRoot = MAPPER.readTree(executeJson);
+        String executionResultLink = executeRoot.path("executionResponse")
             .path("links")
             .path("executionResult")
             .asText("");
-        logger.info("AFM execution result ID: {}", executionResultId);
+        if (executionResultLink.isBlank()) {
+            executionResultLink = executeRoot.path("links").path("executionResult").asText("");
+        }
 
-        URI storageUri = runContext.storage().putFile(
-            new ByteArrayInputStream(rawJson.getBytes(StandardCharsets.UTF_8)),
-            "execution.json");
+        String executionResultId = "";
+        String resultJson;
+
+        if (!executionResultLink.isBlank()) {
+            int lastSlash = executionResultLink.lastIndexOf('/');
+            executionResultId = lastSlash != -1 ? executionResultLink.substring(lastSlash + 1) : executionResultLink;
+            logger.info("AFM execution started, result ID: {}", executionResultId);
+
+            String resultUrl = executionResultLink.startsWith("http://") || executionResultLink.startsWith("https://")
+                ? executionResultLink
+                : baseUrl + (executionResultLink.startsWith("/") ? "" : "/") + executionResultLink;
+
+            long startTime = System.currentTimeMillis();
+            long maxDurationMs = renderedTimeout.toMillis();
+            long pollIntervalMs = Math.max(100, renderedPollInterval.toMillis());
+            int attempts = 0;
+            String fetchedBody = null;
+
+            while (System.currentTimeMillis() - startTime < maxDurationMs) {
+                attempts++;
+                HttpRequest pollRequest = HttpRequest.builder()
+                    .uri(URI.create(resultUrl))
+                    .method("GET")
+                    .addHeader("Authorization", "Bearer " + renderedToken)
+                    .addHeader("Accept", "application/json")
+                    .build();
+
+                HttpResponse<String> pollResponse = executeRequest(runContext, pollRequest);
+                int status = pollResponse.getStatus() != null ? pollResponse.getStatus().getCode() : 200;
+
+                if (status == 200) {
+                    fetchedBody = pollResponse.getBody() != null ? pollResponse.getBody() : "{}";
+                    logger.info("AFM execution completed after {} attempt(s)", attempts);
+                    break;
+                } else if (status == 202) {
+                    logger.debug("AFM execution in progress (HTTP 202), attempt {}, waiting...", attempts);
+                    long remainingMs = maxDurationMs - (System.currentTimeMillis() - startTime);
+                    if (remainingMs <= 0) {
+                        break;
+                    }
+                    Thread.sleep(Math.min(pollIntervalMs, remainingMs));
+                } else {
+                    break;
+                }
+            }
+
+            if (fetchedBody == null) {
+                throw new TimeoutException("AFM execution did not complete within timeout of "
+                    + renderedTimeout.getSeconds() + "s for resultId: " + executionResultId);
+            }
+            resultJson = fetchedBody;
+        } else {
+            // No separate execution link; response contains execution result directly
+            resultJson = executeJson;
+        }
+
+        JsonNode resultRoot = MAPPER.readTree(resultJson);
+        JsonNode dataNode = resultRoot.path("data");
+        if (dataNode.isMissingNode() && resultRoot.has("executionResult")) {
+            dataNode = resultRoot.path("executionResult").path("data");
+        }
+
+        List<Object> rows = null;
+        Object singleRow = null;
+        Integer size = null;
+
+        if (dataNode.isArray()) {
+            size = dataNode.size();
+            if (renderedFetchType == FetchType.FETCH) {
+                rows = MAPPER.convertValue(dataNode, new TypeReference<List<Object>>() {});
+            } else if (renderedFetchType == FetchType.FETCH_ONE) {
+                if (dataNode.size() > 0) {
+                    singleRow = MAPPER.convertValue(dataNode.get(0), Object.class);
+                }
+            }
+        } else {
+            size = 0;
+        }
+
+        URI storageUri = null;
+        if (renderedFetchType == FetchType.STORE) {
+            storageUri = runContext.storage().putFile(
+                new ByteArrayInputStream(resultJson.getBytes(StandardCharsets.UTF_8)),
+                "execution_result.json"
+            );
+        }
 
         return Output.builder()
             .executionResultId(executionResultId)
             .uri(storageUri)
+            .rows(rows)
+            .row(singleRow)
+            .size(size)
             .build();
     }
 
@@ -166,8 +284,26 @@ public class Execute extends AbstractGooddata implements RunnableTask<Execute.Ou
 
         @Schema(
             title = "Raw response URI",
-            description = "Kestra internal file URI pointing to the full AFM execute response JSON."
+            description = "Kestra internal file URI pointing to the full AFM execute result JSON (when fetchType is STORE)."
         )
         private final URI uri;
+
+        @Schema(
+            title = "Fetched rows",
+            description = "List of result rows returned by the AFM query (when fetchType is FETCH)."
+        )
+        private final List<Object> rows;
+
+        @Schema(
+            title = "Single row",
+            description = "First result row returned by the AFM query (when fetchType is FETCH_ONE)."
+        )
+        private final Object row;
+
+        @Schema(
+            title = "Result size",
+            description = "Number of data rows or elements returned in the result."
+        )
+        private final Integer size;
     }
 }
