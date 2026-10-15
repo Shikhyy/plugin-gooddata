@@ -2,22 +2,23 @@ package io.kestra.plugin.gooddata.layouts;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.kestra.core.http.HttpRequest;
+import io.kestra.core.http.HttpResponse;
 import io.kestra.core.models.annotations.Example;
 import io.kestra.core.models.annotations.Plugin;
+import io.kestra.core.models.annotations.PluginProperty;
 import io.kestra.core.models.property.Property;
 import io.kestra.core.models.tasks.RunnableTask;
 import io.kestra.core.runners.RunContext;
 import io.kestra.plugin.gooddata.AbstractGooddata;
 import io.swagger.v3.oas.annotations.media.Schema;
+import jakarta.validation.constraints.NotNull;
 import lombok.*;
 import lombok.experimental.SuperBuilder;
 import org.slf4j.Logger;
 
 import java.io.ByteArrayInputStream;
 import java.net.URI;
-import java.net.http.HttpClient;
-import java.net.http.HttpRequest;
-import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 
 /**
@@ -64,41 +65,33 @@ public class Export extends AbstractGooddata implements RunnableTask<Export.Outp
         title = "Workspace ID",
         description = "The identifier of the GoodData workspace whose declarative layout to export."
     )
+    @NotNull
+    @PluginProperty(group = "main")
     private Property<String> workspaceId;
 
     @Override
     public Output run(RunContext runContext) throws Exception {
         Logger logger = runContext.logger();
 
-        String renderedUrl   = runContext.render(url).as(String.class).orElseThrow(
-            () -> new IllegalArgumentException("'url' must be provided"));
-        String renderedToken = runContext.render(apiToken).as(String.class).orElseThrow(
-            () -> new IllegalArgumentException("'apiToken' must be provided"));
-        String renderedWsId  = runContext.render(workspaceId).as(String.class).orElseThrow(
+        String baseUrl = validateAndNormalizeUrl(runContext.render(url).as(String.class).orElseThrow(
+            () -> new IllegalArgumentException("'url' must be provided")));
+        String renderedToken = getRenderedApiToken(runContext);
+        String renderedWsId = runContext.render(workspaceId).as(String.class).orElseThrow(
             () -> new IllegalArgumentException("'workspaceId' must be provided"));
 
-        String baseUrl   = renderedUrl.replaceAll("/+$", "");
-        String layoutUrl = baseUrl + "/api/v1/layout/workspaces/" + renderedWsId;
+        String encodedWsId = encodePath(renderedWsId);
+        String layoutUrl = baseUrl + "/api/v1/layout/workspaces/" + encodedWsId;
         logger.info("Exporting workspace layout from {}", layoutUrl);
 
-        HttpClient client = HttpClient.newBuilder().build();
-        HttpRequest request = HttpRequest.newBuilder()
+        HttpRequest request = HttpRequest.builder()
             .uri(URI.create(layoutUrl))
-            .header("Authorization", "Bearer " + renderedToken)
-            .header("Accept", "application/json")
-            .GET()
+            .method("GET")
+            .addHeader("Authorization", "Bearer " + renderedToken)
+            .addHeader("Accept", "application/json")
             .build();
 
-        HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
-
-        if (response.statusCode() < 200 || response.statusCode() >= 300) {
-            throw new RuntimeException(
-                "GoodData layout API returned HTTP " + response.statusCode()
-                    + ": " + response.body());
-        }
-
-        String rawJson = response.body();
-        logger.debug("Workspace layout response length: {} bytes", rawJson.length());
+        HttpResponse<String> response = executeRequest(runContext, request);
+        String rawJson = response.getBody() != null ? response.getBody() : "{}";
 
         // Count LDM datasets: response shape uses ldm.datasets
         JsonNode root = MAPPER.readTree(rawJson);
