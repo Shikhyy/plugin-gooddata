@@ -2,6 +2,8 @@ package io.kestra.plugin.gooddata.workspaces;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.kestra.core.http.HttpRequest;
+import io.kestra.core.http.HttpResponse;
 import io.kestra.core.models.annotations.Example;
 import io.kestra.core.models.annotations.Plugin;
 import io.kestra.core.models.tasks.RunnableTask;
@@ -14,9 +16,6 @@ import org.slf4j.Logger;
 
 import java.io.ByteArrayInputStream;
 import java.net.URI;
-import java.net.http.HttpClient;
-import java.net.http.HttpRequest;
-import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 
 /**
@@ -62,31 +61,23 @@ public class List extends AbstractGooddata implements RunnableTask<List.Output> 
     public Output run(RunContext runContext) throws Exception {
         Logger logger = runContext.logger();
 
-        String renderedUrl   = runContext.render(url).as(String.class).orElseThrow(
-            () -> new IllegalArgumentException("'url' must be provided"));
-        String renderedToken = runContext.render(apiToken).as(String.class).orElseThrow(
-            () -> new IllegalArgumentException("'apiToken' must be provided"));
+        String baseUrl = validateAndNormalizeUrl(runContext.render(url).as(String.class).orElseThrow(
+            () -> new IllegalArgumentException("'url' must be provided")));
+        String renderedToken = getRenderedApiToken(runContext);
 
-        String baseUrl = renderedUrl.replaceAll("/+$", "");
         String endpoint = baseUrl + "/api/v1/entities/workspaces";
         logger.info("Listing GoodData workspaces from {}", endpoint);
 
-        HttpClient client = HttpClient.newBuilder().build();
-        HttpRequest request = HttpRequest.newBuilder()
+        HttpRequest request = HttpRequest.builder()
             .uri(URI.create(endpoint))
-            .header("Authorization", "Bearer " + renderedToken)
-            .header("Accept", "application/json")
-            .GET()
+            .method("GET")
+            .addHeader("Authorization", "Bearer " + renderedToken)
+            .addHeader("Accept", "application/json")
             .build();
 
-        HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
+        HttpResponse<String> response = executeRequest(runContext, request);
+        String rawJson = response.getBody() != null ? response.getBody() : "{}";
 
-        if (response.statusCode() < 200 || response.statusCode() >= 300) {
-            throw new RuntimeException(
-                "GoodData API error: " + response.statusCode() + " " + response.body());
-        }
-
-        String rawJson = response.body();
         JsonNode root = MAPPER.readTree(rawJson);
         int count = root.path("data").size();
         logger.info("Found {} workspaces", count);
