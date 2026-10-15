@@ -197,10 +197,12 @@ public class Trigger extends AbstractTrigger implements PollingTriggerInterface,
             kvStore.put(kvKey, new KVValueAndMetadata(null, currentWatermark));
         }
 
-        URI storageUri = runContext.storage().putFile(
-            new ByteArrayInputStream(rawJson.getBytes(StandardCharsets.UTF_8)),
-            "trigger_" + targetSuffix + ".json"
-        );
+        URI storageUri = runContext.storage() != null
+            ? runContext.storage().putFile(
+                new ByteArrayInputStream(rawJson.getBytes(StandardCharsets.UTF_8)),
+                "trigger_" + targetSuffix + ".json"
+            )
+            : null;
 
         Output output = Output.builder()
             .watermark(currentWatermark)
