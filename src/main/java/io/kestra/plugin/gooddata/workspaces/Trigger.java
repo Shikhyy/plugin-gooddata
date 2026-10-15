@@ -1,5 +1,7 @@
 package io.kestra.plugin.gooddata.workspaces;
 
+import io.kestra.core.http.HttpRequest;
+import io.kestra.core.http.HttpResponse;
 import io.kestra.core.models.annotations.Example;
 import io.kestra.core.models.annotations.Plugin;
 import io.kestra.core.models.annotations.PluginProperty;
@@ -15,16 +17,15 @@ import io.kestra.core.runners.RunContext;
 import io.kestra.core.storages.kv.KVStore;
 import io.kestra.core.storages.kv.KVValue;
 import io.kestra.core.storages.kv.KVValueAndMetadata;
+import io.kestra.plugin.gooddata.AbstractGooddata;
 import io.swagger.v3.oas.annotations.media.Schema;
+import jakarta.validation.constraints.NotNull;
 import lombok.*;
 import lombok.experimental.SuperBuilder;
 import org.slf4j.Logger;
 
 import java.io.ByteArrayInputStream;
 import java.net.URI;
-import java.net.http.HttpClient;
-import java.net.http.HttpRequest;
-import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.time.Duration;
@@ -82,12 +83,15 @@ public class Trigger extends AbstractTrigger implements PollingTriggerInterface,
         title = "GoodData host URL",
         description = "Base URL of the GoodData Cloud or GoodData.CN instance, e.g. https://acme.cloud.gooddata.com"
     )
+    @NotNull
+    @PluginProperty(group = "connection")
     private Property<String> url;
 
     @Schema(
         title = "API token",
         description = "Personal API token for authentication."
     )
+    @NotNull
     @PluginProperty(group = "connection", secret = true)
     @ToString.Exclude
     private Property<String> apiToken;
@@ -96,7 +100,24 @@ public class Trigger extends AbstractTrigger implements PollingTriggerInterface,
         title = "Workspace ID",
         description = "Optional workspace ID to monitor layout changes for. If omitted, monitors the workspace list."
     )
+    @PluginProperty(group = "main")
     private Property<String> workspaceId;
+
+    @Schema(
+        title = "HTTP timeout",
+        description = "Timeout duration for polling HTTP requests."
+    )
+    @Builder.Default
+    @PluginProperty(group = "connection")
+    private Property<Duration> timeout = Property.of(Duration.ofSeconds(60));
+
+    @Schema(
+        title = "On startup trigger",
+        description = "Whether to trigger an execution on initial startup when no prior watermark exists. Defaults to false."
+    )
+    @Builder.Default
+    @PluginProperty(group = "processing")
+    private Property<Boolean> onStartup = Property.of(false);
 
     @Override
     public Duration getInterval() {
@@ -108,57 +129,73 @@ public class Trigger extends AbstractTrigger implements PollingTriggerInterface,
         RunContext runContext = conditionContext.getRunContext();
         Logger logger = runContext.logger();
 
-        String renderedUrl   = runContext.render(url).as(String.class).orElseThrow(
+        String rawUrl = runContext.render(url).as(String.class).orElseThrow(
             () -> new IllegalArgumentException("'url' must be provided"));
+        String baseUrl = AbstractGooddata.validateAndNormalizeUrl(rawUrl);
         String renderedToken = runContext.render(apiToken).as(String.class).orElseThrow(
             () -> new IllegalArgumentException("'apiToken' must be provided"));
-        String renderedWsId  = workspaceId != null ? runContext.render(workspaceId).as(String.class).orElse(null) : null;
+        String renderedWsId = workspaceId != null ? runContext.render(workspaceId).as(String.class).orElse(null) : null;
 
-        String baseUrl = renderedUrl.replaceAll("/+$", "");
-        String endpoint = (renderedWsId != null && !renderedWsId.isBlank())
-            ? baseUrl + "/api/v1/layout/workspaces/" + renderedWsId
-            : baseUrl + "/api/v1/entities/workspaces";
+        Duration renderedTimeout = timeout != null
+            ? runContext.render(timeout).as(Duration.class).orElse(Duration.ofSeconds(60))
+            : Duration.ofSeconds(60);
+
+        boolean renderedOnStartup = onStartup != null
+            ? runContext.render(onStartup).as(Boolean.class).orElse(false)
+            : false;
+
+        String endpoint;
+        String targetSuffix;
+        if (renderedWsId != null && !renderedWsId.isBlank()) {
+            String encodedWsId = AbstractGooddata.encodePath(renderedWsId);
+            endpoint = baseUrl + "/api/v1/layout/workspaces/" + encodedWsId;
+            targetSuffix = encodedWsId;
+        } else {
+            endpoint = baseUrl + "/api/v1/entities/workspaces";
+            targetSuffix = "entities";
+        }
 
         logger.debug("Checking GoodData change at endpoint: {}", endpoint);
 
-        HttpClient client = HttpClient.newBuilder().build();
-        HttpRequest request = HttpRequest.newBuilder()
+        HttpRequest request = HttpRequest.builder()
             .uri(URI.create(endpoint))
-            .header("Authorization", "Bearer " + renderedToken)
-            .header("Accept", "application/json")
-            .GET()
+            .method("GET")
+            .addHeader("Authorization", "Bearer " + renderedToken)
+            .addHeader("Accept", "application/json")
             .build();
 
-        HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
-
-        if (response.statusCode() < 200 || response.statusCode() >= 300) {
-            logger.warn("GoodData trigger polling returned HTTP {}: {}", response.statusCode(), response.body());
-            return Optional.empty();
-        }
-
-        String rawJson = response.body();
+        HttpResponse<String> response = AbstractGooddata.execute(runContext, request, renderedTimeout);
+        String rawJson = response.getBody() != null ? response.getBody() : "{}";
 
         // Calculate watermark fingerprint via SHA-256
         MessageDigest digest = MessageDigest.getInstance("SHA-256");
         byte[] hash = digest.digest(rawJson.getBytes(StandardCharsets.UTF_8));
         String currentWatermark = HexFormat.of().formatHex(hash);
 
-        // Retrieve last-seen watermark from Kestra KV store
+        // Watermark KV key scoped per flow and trigger to prevent missed/duplicated events across flows
         String namespace = triggerContext.getNamespace();
-        KVStore kvStore = runContext.namespaceKv(namespace);
-        String targetSuffix = (renderedWsId != null && !renderedWsId.isBlank())
-            ? renderedWsId.replaceAll("[^a-zA-Z0-9_-]", "_")
-            : "entities";
-        String kvKey = "gooddata_watermark_" + targetSuffix;
+        String flowId = triggerContext.getFlowId() != null ? triggerContext.getFlowId() : "default";
+        String triggerId = triggerContext.getTriggerId() != null ? triggerContext.getTriggerId() : "default";
+        String kvKey = "gooddata_watermark_" + flowId.length() + "_" + flowId + "_" + triggerId + "_" + targetSuffix;
 
+        KVStore kvStore = runContext.namespaceKv(namespace);
         Optional<KVValue> previousValue = kvStore.getValue(kvKey);
-        if (previousValue.isPresent() && currentWatermark.equals(String.valueOf(previousValue.get().value()))) {
+
+        if (previousValue.isEmpty()) {
+            // First poll: seed watermark
+            kvStore.put(kvKey, new KVValueAndMetadata(null, currentWatermark));
+            if (!renderedOnStartup) {
+                logger.info("Initialized GoodData watermark for {} to {}. Skipping initial execution.", kvKey, currentWatermark);
+                return Optional.empty();
+            }
+            logger.info("Initialized GoodData watermark for {} to {} with onStartup=true. Triggering execution.", kvKey, currentWatermark);
+        } else if (currentWatermark.equals(String.valueOf(previousValue.get().value()))) {
             logger.debug("No GoodData change detected for {}, watermark={}", kvKey, currentWatermark);
             return Optional.empty();
+        } else {
+            logger.info("GoodData change detected for {}. Updating watermark to {}", kvKey, currentWatermark);
+            kvStore.put(kvKey, new KVValueAndMetadata(null, currentWatermark));
         }
-
-        logger.info("GoodData change detected for {}. Updating watermark to {}", kvKey, currentWatermark);
-        kvStore.put(kvKey, new KVValueAndMetadata(null, currentWatermark));
 
         URI storageUri = runContext.storage().putFile(
             new ByteArrayInputStream(rawJson.getBytes(StandardCharsets.UTF_8)),
