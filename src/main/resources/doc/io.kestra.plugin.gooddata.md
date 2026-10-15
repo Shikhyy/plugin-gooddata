@@ -2,6 +2,20 @@ This plugin integrates [GoodData](https://www.gooddata.com/) with [Kestra](https
 letting you automate data-source scanning, analytics query execution, declarative workspace layout
 export, and workspace change monitoring as part of your data pipelines.
 
+## Authentication
+
+All GoodData tasks and triggers communicate with the GoodData REST API using Bearer-token authentication.
+
+- **URL (`url`)**: The base URL of your GoodData instance (e.g., `https://acme.cloud.gooddata.com` for GoodData Cloud or `https://gooddata.mycompany.com` for self-hosted GoodData.CN).
+- **API Token (`apiToken`)**: A personal API token generated in the GoodData administration console. Always store this value using Kestra secrets rather than hardcoding it:
+
+```yaml
+url: "https://acme.cloud.gooddata.com"
+apiToken: "{{ secret('GOODDATA_TOKEN') }}"
+```
+
+- **Timeout (`timeout`)**: Optional HTTP request timeout duration (e.g. `PT60S`).
+
 ## Tasks and Triggers
 
 ### `dataSources.Scan`
@@ -13,20 +27,34 @@ Triggers a schema scan on a GoodData data source via
 
 | Field | Type | Description |
 |---|---|---|
-| `tablesFound` | `int` | Number of tables/views discovered |
-| `uri` | `URI` | Kestra internal file URI containing the raw JSON scan output |
+| `tablesFound` | `int` | Number of tables and views discovered by the scan |
+| `uri` | `URI` | Kestra internal file URI pointing to the raw JSON scan response |
 
 ### `executions.Execute`
 
 Executes an AFM (Analytical Framework Model) query against a GoodData workspace via
-`POST /api/v1/actions/workspaces/{workspaceId}/execution/afm/execute`.
+`POST /api/v1/actions/workspaces/{workspaceId}/execution/afm/execute`. Polls the execution result endpoint until computation finishes and processes results according to `fetchType`.
+
+**Configuration Options**
+
+- `afmRequest`: Complete AFM query specification in JSON format.
+- `fetchType`: Processing mode for execution results:
+  - `STORE` (default): Writes full result JSON to Kestra internal storage.
+  - `FETCH`: Returns parsed data rows in `rows`.
+  - `FETCH_ONE`: Returns the first data row in `row`.
+  - `NONE`: Computes without storing or fetching row data.
+- `pollInterval`: Polling interval between status checks (default: `PT1S`).
+- `timeout`: Maximum duration to wait for calculation completion (default: `PT60S`).
 
 **Outputs**
 
 | Field | Type | Description |
 |---|---|---|
-| `executionResultId` | `String` | GoodData execution result ID from executionResponse.links.executionResult |
-| `uri` | `URI` | Kestra internal file URI containing the raw JSON execution response |
+| `executionResultId` | `String` | GoodData execution result ID from `executionResponse.links.executionResult` |
+| `uri` | `URI` | Kestra internal file URI pointing to the full AFM execute result JSON (when `fetchType` is `STORE`) |
+| `rows` | `List<Object>` | List of result rows (when `fetchType` is `FETCH`) |
+| `row` | `Object` | First result row (when `fetchType` is `FETCH_ONE`) |
+| `size` | `Integer` | Number of data rows returned |
 
 ### `layouts.Export`
 
@@ -37,8 +65,8 @@ Exports the full declarative workspace layout (Logical Data Model + analytics mo
 
 | Field | Type | Description |
 |---|---|---|
+| `datasetCount` | `int` | Count of LDM datasets found in the exported layout |
 | `uri` | `URI` | Kestra internal file URI containing the raw JSON workspace layout |
-| `datasetCount` | `int` | Count of LDM datasets found in the layout |
 
 ### `workspaces.List`
 
@@ -50,22 +78,25 @@ Lists all workspaces accessible to the API token via
 | Field | Type | Description |
 |---|---|---|
 | `count` | `int` | Number of workspaces returned |
-| `uri` | `URI` | Kestra internal file URI containing the raw JSON list |
+| `uri` | `URI` | Kestra internal file URI containing the raw JSON workspaces list |
 
 ### `workspaces.Trigger`
 
-Polling trigger that monitors GoodData workspace changes and triggers executions when the
-layout watermark changes, persisting state in Kestra's namespace KV Store.
+Polling trigger that monitors GoodData for workspace or declarative layout changes. Computes a SHA-256 fingerprint of the remote state and compares it to a persisted watermark stored in Kestra's namespace KV Store. Watermark keys are scoped per flow and trigger to prevent cross-flow collisions.
 
-## Authentication
+**Configuration Options**
 
-All tasks accept a `url` (base URL of your GoodData Cloud or GoodData.CN instance) and an
-`apiToken` (personal API token). Use Kestra secrets to avoid hardcoding credentials:
+- `workspaceId`: Optional workspace ID to monitor. If omitted, monitors the tenant-wide workspace list.
+- `interval`: Polling interval (e.g. `PT5M`).
+- `onStartup`: Whether to trigger on initial poll when no prior watermark exists (default: `false` to seed watermark silently).
 
-```yaml
-url: "https://acme.cloud.gooddata.com"
-apiToken: "{{ secret('GOODDATA_TOKEN') }}"
-```
+**Outputs**
+
+| Field | Type | Description |
+|---|---|---|
+| `watermark` | `String` | Updated SHA-256 fingerprint representing the detected state |
+| `workspaceId` | `String` | Monitored workspace ID, if configured |
+| `uri` | `URI` | Kestra internal file URI pointing to the detected state JSON |
 
 ## Example Pipeline
 
