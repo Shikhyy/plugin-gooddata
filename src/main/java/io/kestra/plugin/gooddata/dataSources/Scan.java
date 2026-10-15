@@ -2,22 +2,23 @@ package io.kestra.plugin.gooddata.dataSources;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.kestra.core.http.HttpRequest;
+import io.kestra.core.http.HttpResponse;
 import io.kestra.core.models.annotations.Example;
 import io.kestra.core.models.annotations.Plugin;
+import io.kestra.core.models.annotations.PluginProperty;
 import io.kestra.core.models.property.Property;
 import io.kestra.core.models.tasks.RunnableTask;
 import io.kestra.core.runners.RunContext;
 import io.kestra.plugin.gooddata.AbstractGooddata;
 import io.swagger.v3.oas.annotations.media.Schema;
+import jakarta.validation.constraints.NotNull;
 import lombok.*;
 import lombok.experimental.SuperBuilder;
 import org.slf4j.Logger;
 
 import java.io.ByteArrayInputStream;
 import java.net.URI;
-import java.net.http.HttpClient;
-import java.net.http.HttpRequest;
-import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 
 /**
@@ -64,41 +65,39 @@ public class Scan extends AbstractGooddata implements RunnableTask<Scan.Output> 
         title = "Data source ID",
         description = "The identifier of the GoodData data source to scan."
     )
+    @NotNull
+    @PluginProperty(group = "main")
     private Property<String> dataSourceId;
 
     @Override
     public Output run(RunContext runContext) throws Exception {
         Logger logger = runContext.logger();
 
-        String renderedUrl      = runContext.render(url).as(String.class).orElseThrow(
-            () -> new IllegalArgumentException("'url' must be provided"));
-        String renderedToken    = runContext.render(apiToken).as(String.class).orElseThrow(
-            () -> new IllegalArgumentException("'apiToken' must be provided"));
-        String renderedDsId     = runContext.render(dataSourceId).as(String.class).orElseThrow(
+        String baseUrl = validateAndNormalizeUrl(runContext.render(url).as(String.class).orElseThrow(
+            () -> new IllegalArgumentException("'url' must be provided")));
+        String renderedToken = getRenderedApiToken(runContext);
+        String renderedDsId = runContext.render(dataSourceId).as(String.class).orElseThrow(
             () -> new IllegalArgumentException("'dataSourceId' must be provided"));
 
-        String baseUrl   = renderedUrl.replaceAll("/+$", "");
-        String scanUrl   = baseUrl + "/api/v1/actions/dataSources/" + renderedDsId + "/scan";
-        logger.info("Scanning GoodData data source at {}", scanUrl);
+        String encodedDsId = encodePath(renderedDsId);
+        String scanUrl = baseUrl + "/api/v1/actions/dataSources/" + encodedDsId + "/scan";
+        logger.info("Scanning GoodData data source '{}' at {}", renderedDsId, scanUrl);
 
-        HttpClient client = HttpClient.newBuilder().build();
-        HttpRequest request = HttpRequest.newBuilder()
+        HttpRequest request = HttpRequest.builder()
             .uri(URI.create(scanUrl))
-            .header("Authorization", "Bearer " + renderedToken)
-            .header("Content-Type", "application/json")
-            .POST(HttpRequest.BodyPublishers.ofString("{}"))
+            .method("POST")
+            .addHeader("Authorization", "Bearer " + renderedToken)
+            .addHeader("Content-Type", "application/json")
+            .addHeader("Accept", "application/json")
+            .body(HttpRequest.StringRequestBody.builder()
+                .content("{}")
+                .contentType("application/json")
+                .charset(StandardCharsets.UTF_8)
+                .build())
             .build();
 
-        HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
-
-        if (response.statusCode() < 200 || response.statusCode() >= 300) {
-            throw new RuntimeException(
-                "GoodData scan API returned HTTP " + response.statusCode()
-                    + ": " + response.body());
-        }
-
-        String rawJson = response.body();
-        logger.debug("Scan raw response: {}", rawJson);
+        HttpResponse<String> response = executeRequest(runContext, request);
+        String rawJson = response.getBody() != null ? response.getBody() : "{}";
 
         // Count tables: response shape is {"pdm":{"tables":[...]}}
         JsonNode root = MAPPER.readTree(rawJson);

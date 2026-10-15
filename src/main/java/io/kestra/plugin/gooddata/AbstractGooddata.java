@@ -73,6 +73,11 @@ public abstract class AbstractGooddata extends Task {
         return trimmed.replaceAll("/+$", "");
     }
 
+    protected String getRenderedApiToken(RunContext runContext) throws IllegalVariableEvaluationException {
+        return runContext.render(this.apiToken).as(String.class).orElseThrow(
+            () -> new IllegalArgumentException("'apiToken' must be provided"));
+    }
+
     public static HttpClient createHttpClient(RunContext runContext, Duration timeout) throws IllegalVariableEvaluationException {
         Duration effectiveTimeout = timeout != null ? timeout : Duration.ofSeconds(60);
         HttpConfiguration config = HttpConfiguration.builder()
