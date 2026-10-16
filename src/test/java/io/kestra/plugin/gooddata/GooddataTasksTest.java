@@ -60,9 +60,9 @@ public class GooddataTasksTest {
     void scanDataSourceTaskBuilder() {
         Scan scan = Scan.builder()
             .id("scan-test")
-            .url(Property.of("https://acme.cloud.gooddata.com"))
-            .apiToken(Property.of("secret-token"))
-            .dataSourceId(Property.of("postgres-source"))
+            .url(Property.ofValue("https://acme.cloud.gooddata.com"))
+            .apiToken(Property.ofValue("secret-token"))
+            .dataSourceId(Property.ofValue("postgres-source"))
             .build();
 
         assertThat(scan.getId(), is("scan-test"));
@@ -75,10 +75,10 @@ public class GooddataTasksTest {
     void executeAfmTaskBuilder() {
         Execute execute = Execute.builder()
             .id("exec-test")
-            .url(Property.of("https://acme.cloud.gooddata.com"))
-            .apiToken(Property.of("secret-token"))
-            .workspaceId(Property.of("sales-workspace"))
-            .afmRequest(Property.of("{\"execution\": {}}"))
+            .url(Property.ofValue("https://acme.cloud.gooddata.com"))
+            .apiToken(Property.ofValue("secret-token"))
+            .workspaceId(Property.ofValue("sales-workspace"))
+            .afmRequest(Property.ofValue("{\"execution\": {}}"))
             .build();
 
         assertThat(execute.getId(), is("exec-test"));
@@ -90,9 +90,9 @@ public class GooddataTasksTest {
     void exportWorkspaceLayoutTaskBuilder() {
         Export export = Export.builder()
             .id("export-test")
-            .url(Property.of("https://acme.cloud.gooddata.com"))
-            .apiToken(Property.of("secret-token"))
-            .workspaceId(Property.of("marketing-workspace"))
+            .url(Property.ofValue("https://acme.cloud.gooddata.com"))
+            .apiToken(Property.ofValue("secret-token"))
+            .workspaceId(Property.ofValue("marketing-workspace"))
             .build();
 
         assertThat(export.getId(), is("export-test"));
@@ -103,8 +103,8 @@ public class GooddataTasksTest {
     void listWorkspacesTaskBuilder() {
         List list = List.builder()
             .id("list-test")
-            .url(Property.of("https://acme.cloud.gooddata.com"))
-            .apiToken(Property.of("secret-token"))
+            .url(Property.ofValue("https://acme.cloud.gooddata.com"))
+            .apiToken(Property.ofValue("secret-token"))
             .build();
 
         assertThat(list.getId(), is("list-test"));
@@ -115,9 +115,9 @@ public class GooddataTasksTest {
     void triggerBuilder() {
         Trigger trigger = Trigger.builder()
             .id("trigger-test")
-            .url(Property.of("https://acme.cloud.gooddata.com"))
-            .apiToken(Property.of("secret-token"))
-            .workspaceId(Property.of("sales-workspace"))
+            .url(Property.ofValue("https://acme.cloud.gooddata.com"))
+            .apiToken(Property.ofValue("secret-token"))
+            .workspaceId(Property.ofValue("sales-workspace"))
             .interval(Duration.ofMinutes(10))
             .build();
 
@@ -137,9 +137,9 @@ public class GooddataTasksTest {
 
         Scan scan = Scan.builder()
             .id("scan-test")
-            .url(Property.of(serverUrl))
-            .apiToken(Property.of("test-token"))
-            .dataSourceId(Property.of("postgres-source"))
+            .url(Property.ofValue(serverUrl))
+            .apiToken(Property.ofValue("test-token"))
+            .dataSourceId(Property.ofValue("postgres-source"))
             .build();
 
         RunContext runContext = runContextFactory.of();
@@ -159,9 +159,9 @@ public class GooddataTasksTest {
 
         Scan scan = Scan.builder()
             .id("scan-fail")
-            .url(Property.of(serverUrl))
-            .apiToken(Property.of("test-token"))
-            .dataSourceId(Property.of("missing-source"))
+            .url(Property.ofValue(serverUrl))
+            .apiToken(Property.ofValue("test-token"))
+            .dataSourceId(Property.ofValue("missing-source"))
             .build();
 
         RunContext runContext = runContextFactory.of();
@@ -181,9 +181,9 @@ public class GooddataTasksTest {
 
         Export export = Export.builder()
             .id("export-test")
-            .url(Property.of(serverUrl))
-            .apiToken(Property.of("test-token"))
-            .workspaceId(Property.of("sales-workspace"))
+            .url(Property.ofValue(serverUrl))
+            .apiToken(Property.ofValue("test-token"))
+            .workspaceId(Property.ofValue("sales-workspace"))
             .build();
 
         RunContext runContext = runContextFactory.of();
@@ -203,9 +203,9 @@ public class GooddataTasksTest {
 
         Export export = Export.builder()
             .id("export-fail")
-            .url(Property.of(serverUrl))
-            .apiToken(Property.of("bad-token"))
-            .workspaceId(Property.of("sales-workspace"))
+            .url(Property.ofValue(serverUrl))
+            .apiToken(Property.ofValue("bad-token"))
+            .workspaceId(Property.ofValue("sales-workspace"))
             .build();
 
         RunContext runContext = runContextFactory.of();
@@ -225,8 +225,8 @@ public class GooddataTasksTest {
 
         List list = List.builder()
             .id("list-test")
-            .url(Property.of(serverUrl))
-            .apiToken(Property.of("test-token"))
+            .url(Property.ofValue(serverUrl))
+            .apiToken(Property.ofValue("test-token"))
             .build();
 
         RunContext runContext = runContextFactory.of();
@@ -263,12 +263,12 @@ public class GooddataTasksTest {
 
         Execute execute = Execute.builder()
             .id("exec-test")
-            .url(Property.of(serverUrl))
-            .apiToken(Property.of("test-token"))
-            .workspaceId(Property.of("sales-workspace"))
-            .afmRequest(Property.of("{\"execution\": {}}"))
-            .fetchType(Property.of(FetchType.FETCH))
-            .pollInterval(Property.of(Duration.ofMillis(50)))
+            .url(Property.ofValue(serverUrl))
+            .apiToken(Property.ofValue("test-token"))
+            .workspaceId(Property.ofValue("sales-workspace"))
+            .afmRequest(Property.ofValue("{\"execution\": {}}"))
+            .fetchType(Property.ofValue(FetchType.FETCH))
+            .pollInterval(Property.ofValue(Duration.ofMillis(50)))
             .build();
 
         RunContext runContext = runContextFactory.of();
@@ -296,11 +296,11 @@ public class GooddataTasksTest {
 
         Execute execute = Execute.builder()
             .id("exec-store-test")
-            .url(Property.of(serverUrl))
-            .apiToken(Property.of("test-token"))
-            .workspaceId(Property.of("sales-workspace"))
-            .afmRequest(Property.of("{\"execution\": {}}"))
-            .fetchType(Property.of(FetchType.STORE))
+            .url(Property.ofValue(serverUrl))
+            .apiToken(Property.ofValue("test-token"))
+            .workspaceId(Property.ofValue("sales-workspace"))
+            .afmRequest(Property.ofValue("{\"execution\": {}}"))
+            .fetchType(Property.ofValue(FetchType.STORE))
             .build();
 
         RunContext runContext = runContextFactory.of();
@@ -324,9 +324,9 @@ public class GooddataTasksTest {
         Trigger trigger = Trigger.builder()
             .id(triggerId)
             .type(Trigger.class.getName())
-            .url(Property.of(serverUrl))
-            .apiToken(Property.of("secret-token"))
-            .workspaceId(Property.of("sales-workspace"))
+            .url(Property.ofValue(serverUrl))
+            .apiToken(Property.ofValue("secret-token"))
+            .workspaceId(Property.ofValue("sales-workspace"))
             .build();
 
         Flow flow = Flow.builder()
@@ -391,12 +391,12 @@ public class GooddataTasksTest {
 
         Execute execute = Execute.builder()
             .id("exec-timeout-test")
-            .url(Property.of(serverUrl))
-            .apiToken(Property.of("test-token"))
-            .workspaceId(Property.of("sales-workspace"))
-            .afmRequest(Property.of("{\"execution\": {}}"))
-            .timeout(Property.of(Duration.ofMillis(300)))
-            .pollInterval(Property.of(Duration.ofMillis(50)))
+            .url(Property.ofValue(serverUrl))
+            .apiToken(Property.ofValue("test-token"))
+            .workspaceId(Property.ofValue("sales-workspace"))
+            .afmRequest(Property.ofValue("{\"execution\": {}}"))
+            .maxPollDuration(Property.ofValue(Duration.ofMillis(300)))
+            .pollInterval(Property.ofValue(Duration.ofMillis(50)))
             .build();
 
         RunContext runContext = runContextFactory.of();
@@ -414,10 +414,10 @@ public class GooddataTasksTest {
 
         Execute execute = Execute.builder()
             .id("exec-ssrf-test")
-            .url(Property.of(serverUrl))
-            .apiToken(Property.of("test-token"))
-            .workspaceId(Property.of("sales-workspace"))
-            .afmRequest(Property.of("{\"execution\": {}}"))
+            .url(Property.ofValue(serverUrl))
+            .apiToken(Property.ofValue("test-token"))
+            .workspaceId(Property.ofValue("sales-workspace"))
+            .afmRequest(Property.ofValue("{\"execution\": {}}"))
             .build();
 
         RunContext runContext = runContextFactory.of();
@@ -441,11 +441,11 @@ public class GooddataTasksTest {
 
         Execute execute = Execute.builder()
             .id("exec-abs-test")
-            .url(Property.of(serverUrl))
-            .apiToken(Property.of("test-token"))
-            .workspaceId(Property.of("sales-workspace"))
-            .afmRequest(Property.of("{\"execution\": {}}"))
-            .fetchType(Property.of(FetchType.FETCH))
+            .url(Property.ofValue(serverUrl))
+            .apiToken(Property.ofValue("test-token"))
+            .workspaceId(Property.ofValue("sales-workspace"))
+            .afmRequest(Property.ofValue("{\"execution\": {}}"))
+            .fetchType(Property.ofValue(FetchType.FETCH))
             .build();
 
         RunContext runContext = runContextFactory.of();
@@ -472,11 +472,11 @@ public class GooddataTasksTest {
 
         Execute execute = Execute.builder()
             .id("exec-fetch-one-test")
-            .url(Property.of(serverUrl))
-            .apiToken(Property.of("test-token"))
-            .workspaceId(Property.of("sales-workspace"))
-            .afmRequest(Property.of("{\"execution\": {}}"))
-            .fetchType(Property.of(FetchType.FETCH_ONE))
+            .url(Property.ofValue(serverUrl))
+            .apiToken(Property.ofValue("test-token"))
+            .workspaceId(Property.ofValue("sales-workspace"))
+            .afmRequest(Property.ofValue("{\"execution\": {}}"))
+            .fetchType(Property.ofValue(FetchType.FETCH_ONE))
             .build();
 
         RunContext runContext = runContextFactory.of();
@@ -498,11 +498,11 @@ public class GooddataTasksTest {
 
         Execute execute = Execute.builder()
             .id("exec-direct-test")
-            .url(Property.of(serverUrl))
-            .apiToken(Property.of("test-token"))
-            .workspaceId(Property.of("sales-workspace"))
-            .afmRequest(Property.of("{\"execution\": {}}"))
-            .fetchType(Property.of(FetchType.FETCH))
+            .url(Property.ofValue(serverUrl))
+            .apiToken(Property.ofValue("test-token"))
+            .workspaceId(Property.ofValue("sales-workspace"))
+            .afmRequest(Property.ofValue("{\"execution\": {}}"))
+            .fetchType(Property.ofValue(FetchType.FETCH))
             .build();
 
         RunContext runContext = runContextFactory.of();
@@ -529,11 +529,11 @@ public class GooddataTasksTest {
 
         Execute execute = Execute.builder()
             .id("exec-unexpected-test")
-            .url(Property.of(serverUrl))
-            .apiToken(Property.of("test-token"))
-            .workspaceId(Property.of("sales-workspace"))
-            .afmRequest(Property.of("{\"execution\": {}}"))
-            .pollInterval(Property.of(Duration.ofMillis(50)))
+            .url(Property.ofValue(serverUrl))
+            .apiToken(Property.ofValue("test-token"))
+            .workspaceId(Property.ofValue("sales-workspace"))
+            .afmRequest(Property.ofValue("{\"execution\": {}}"))
+            .pollInterval(Property.ofValue(Duration.ofMillis(50)))
             .build();
 
         RunContext runContext = runContextFactory.of();
@@ -552,5 +552,37 @@ public class GooddataTasksTest {
 
         assertThat(canonical1, is(canonical2));
         assertThat(canonical1, is("{\"a\":1,\"b\":2,\"c\":[\"x\",\"y\"]}"));
+    }
+
+    @Test
+    void testExecuteAfmWithBareResultId() throws Exception {
+        wireMockServer.stubFor(post(urlEqualTo("/api/v1/actions/workspaces/sales-workspace/execution/afm/execute"))
+            .willReturn(aResponse()
+                .withStatus(200)
+                .withHeader("Content-Type", "application/json")
+                .withBody("{\"executionResponse\": {\"links\": {\"executionResult\": \"res-bare-123\"}}}")));
+
+        wireMockServer.stubFor(get(urlEqualTo("/api/v1/actions/workspaces/sales-workspace/execution/afm/execute/result/res-bare-123"))
+            .willReturn(aResponse()
+                .withStatus(200)
+                .withHeader("Content-Type", "application/json")
+                .withBody("{\"data\": [[\"bare_val_1\", \"bare_val_2\"]]}")));
+
+        Execute execute = Execute.builder()
+            .id("exec-bare-id-test")
+            .url(Property.ofValue(serverUrl))
+            .apiToken(Property.ofValue("test-token"))
+            .workspaceId(Property.ofValue("sales-workspace"))
+            .afmRequest(Property.ofValue("{\"execution\": {}}"))
+            .fetchType(Property.ofValue(FetchType.FETCH))
+            .build();
+
+        RunContext runContext = runContextFactory.of();
+        Execute.Output output = execute.run(runContext);
+
+        assertThat(output.getExecutionResultId(), is("res-bare-123"));
+        assertThat(output.getSize(), is(1));
+        assertThat(output.getRows(), notNullValue());
+        assertThat(output.getRows().size(), is(1));
     }
 }
