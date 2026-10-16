@@ -28,17 +28,16 @@ import lombok.experimental.SuperBuilder;
 import org.slf4j.Logger;
 
 import java.io.ByteArrayInputStream;
+import java.util.Set;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.HashSet;
 import java.util.HexFormat;
 import java.util.List;
 import java.util.Optional;
-import java.util.Set;
 
 /**
  * Polling trigger that fires when a GoodData workspace layout or workspace list changes
@@ -175,80 +174,14 @@ public class Trigger extends AbstractTrigger implements PollingTriggerInterface,
             rawJson = response.getBody() != null ? response.getBody() : "{}";
         } else {
             targetSuffix = "entities";
-            var currentUrl = rUrl + "/api/v1/entities/workspaces";
-            logger.debug("Checking GoodData change for workspace list at: {}", currentUrl);
+            logger.debug("Checking GoodData change for workspace list at: {}", rUrl);
 
-            var allWorkspaces = MAPPER.createArrayNode();
-            String firstPageJson = null;
-            var pageCount = 0;
-            final var maxPages = 50;
+            var result = AbstractGooddata.fetchWorkspacePages(runContext, rUrl, rToken, rRequestTimeout, 50, logger);
+            rawJson = result.getConsolidatedJson();
 
-            var visitedUrls = new HashSet<String>();
-            visitedUrls.add(currentUrl);
-
-            while (currentUrl != null && !currentUrl.isBlank() && pageCount < maxPages) {
-                pageCount++;
-                var request = HttpRequest.builder()
-                    .uri(URI.create(currentUrl))
-                    .method("GET")
-                    .addHeader("Authorization", "Bearer " + rToken)
-                    .addHeader("Accept", "application/json")
-                    .build();
-
-                var response = AbstractGooddata.execute(runContext, request, rRequestTimeout);
-                var pageJson = response.getBody() != null ? response.getBody() : "{}";
-                if (firstPageJson == null) {
-                    firstPageJson = pageJson;
-                }
-
-                var pageRoot = MAPPER.readTree(pageJson);
-                var dataNode = pageRoot.path("data");
-                if (dataNode.isArray()) {
-                    for (var item : dataNode) {
-                        allWorkspaces.add(item);
-                    }
-                }
-
-                var nextLink = pageRoot.path("links").path("next").asText("");
-                if (!nextLink.isBlank()) {
-                    String resolvedNextUrl;
-                    if (nextLink.startsWith("http://") || nextLink.startsWith("https://")) {
-                        var nextUri = URI.create(nextLink);
-                        var baseUri = URI.create(rUrl);
-                        var basePort = baseUri.getPort() != -1 ? baseUri.getPort() : ("https".equalsIgnoreCase(baseUri.getScheme()) ? 443 : 80);
-                        var nextPort = nextUri.getPort() != -1 ? nextUri.getPort() : ("https".equalsIgnoreCase(nextUri.getScheme()) ? 443 : 80);
-
-                        if (nextUri.getHost() == null
-                            || !nextUri.getHost().equalsIgnoreCase(baseUri.getHost())
-                            || nextUri.getScheme() == null
-                            || !nextUri.getScheme().equalsIgnoreCase(baseUri.getScheme())
-                            || basePort != nextPort) {
-                            throw new SecurityException("Untrusted next page host in GoodData response: '"
-                                + nextUri + "' does not match configured base URL '" + rUrl + "'");
-                        }
-                        resolvedNextUrl = nextLink;
-                    } else {
-                        resolvedNextUrl = rUrl + (nextLink.startsWith("/") ? nextLink : "/" + nextLink);
-                    }
-
-                    if (visitedUrls.contains(resolvedNextUrl)) {
-                        logger.warn("Detected circular pagination loop in GoodData workspace trigger. Next URL '{}' already visited. Halting pagination.", resolvedNextUrl);
-                        currentUrl = null;
-                    } else {
-                        visitedUrls.add(resolvedNextUrl);
-                        currentUrl = resolvedNextUrl;
-                    }
-                } else {
-                    currentUrl = null;
-                }
-            }
-
-            if (pageCount <= 1) {
-                rawJson = firstPageJson != null ? firstPageJson : "{}";
-            } else {
-                var consolidated = MAPPER.createObjectNode();
-                consolidated.set("data", allWorkspaces);
-                rawJson = MAPPER.writeValueAsString(consolidated);
+            if (result.isTruncated()) {
+                logger.warn("GoodData workspace trigger reached maximum page limit of 50 with remaining pages available. "
+                    + "The watermark is based on truncated results. Changes beyond page 50 may not trigger.");
             }
         }
 

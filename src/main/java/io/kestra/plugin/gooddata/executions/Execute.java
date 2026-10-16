@@ -199,18 +199,7 @@ public class Execute extends AbstractGooddata implements RunnableTask<Execute.Ou
             var trimmedLink = executionResultLink.trim().replaceAll("/+$", "");
             if (trimmedLink.startsWith("http://") || trimmedLink.startsWith("https://")) {
                 var resultUri = URI.create(trimmedLink);
-                var baseUri = URI.create(rUrl);
-                var basePort = baseUri.getPort() != -1 ? baseUri.getPort() : ("https".equalsIgnoreCase(baseUri.getScheme()) ? 443 : 80);
-                var resultPort = resultUri.getPort() != -1 ? resultUri.getPort() : ("https".equalsIgnoreCase(resultUri.getScheme()) ? 443 : 80);
-
-                if (resultUri.getHost() == null
-                    || !resultUri.getHost().equalsIgnoreCase(baseUri.getHost())
-                    || resultUri.getScheme() == null
-                    || !resultUri.getScheme().equalsIgnoreCase(baseUri.getScheme())
-                    || basePort != resultPort) {
-                    throw new SecurityException("Untrusted executionResult host in GoodData response: '"
-                        + resultUri + "' does not match configured base URL '" + rUrl + "'");
-                }
+                AbstractGooddata.assertSameOrigin(resultUri, rUrl);
             }
 
             var lastSlash = trimmedLink.lastIndexOf('/');
