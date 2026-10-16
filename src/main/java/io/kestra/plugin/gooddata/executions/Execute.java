@@ -13,6 +13,7 @@ import io.kestra.core.models.tasks.RunnableTask;
 import io.kestra.core.models.tasks.common.FetchType;
 import io.kestra.core.runners.RunContext;
 import io.kestra.plugin.gooddata.AbstractGooddata;
+import io.kestra.plugin.gooddata.GooddataApiException;
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotNull;
 import lombok.*;
@@ -24,6 +25,7 @@ import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.List;
+import java.util.Objects;
 import java.util.concurrent.TimeoutException;
 
 /**
@@ -180,12 +182,31 @@ public class Execute extends AbstractGooddata implements RunnableTask<Execute.Ou
 
         if (!executionResultLink.isBlank()) {
             int lastSlash = executionResultLink.lastIndexOf('/');
-            executionResultId = lastSlash != -1 ? executionResultLink.substring(lastSlash + 1) : executionResultLink;
+            String rawId = lastSlash != -1 ? executionResultLink.substring(lastSlash + 1) : executionResultLink;
+            executionResultId = AbstractGooddata.encodePath(rawId);
             logger.info("AFM execution started, result ID: {}", executionResultId);
 
-            String resultUrl = executionResultLink.startsWith("http://") || executionResultLink.startsWith("https://")
-                ? executionResultLink
-                : baseUrl + (executionResultLink.startsWith("/") ? "" : "/") + executionResultLink;
+            URI baseUri = URI.create(baseUrl);
+            URI resultUri = URI.create(executionResultLink);
+
+            String resultUrl;
+            if (resultUri.isAbsolute()) {
+                int basePort = baseUri.getPort() != -1 ? baseUri.getPort() : ("https".equalsIgnoreCase(baseUri.getScheme()) ? 443 : 80);
+                int resultPort = resultUri.getPort() != -1 ? resultUri.getPort() : ("https".equalsIgnoreCase(resultUri.getScheme()) ? 443 : 80);
+
+                if (!Objects.equals(resultUri.getHost(), baseUri.getHost())
+                    || !Objects.equals(resultUri.getScheme(), baseUri.getScheme())
+                    || basePort != resultPort) {
+                    throw new SecurityException("Untrusted executionResult host in GoodData response: '"
+                        + resultUri + "' does not match configured base URL '" + baseUrl + "'");
+                }
+                String rawPath = resultUri.getRawPath();
+                String rawQuery = resultUri.getRawQuery();
+                resultUrl = baseUrl + (rawPath.startsWith("/") ? rawPath : "/" + rawPath)
+                    + (rawQuery != null && !rawQuery.isBlank() ? "?" + rawQuery : "");
+            } else {
+                resultUrl = baseUrl + (executionResultLink.startsWith("/") ? executionResultLink : "/" + executionResultLink);
+            }
 
             long startTime = System.currentTimeMillis();
             long maxDurationMs = renderedTimeout.toMillis();
@@ -217,7 +238,14 @@ public class Execute extends AbstractGooddata implements RunnableTask<Execute.Ou
                     }
                     Thread.sleep(Math.min(pollIntervalMs, remainingMs));
                 } else {
-                    break;
+                    String bodyExcerpt = pollResponse.getBody() != null
+                        ? (pollResponse.getBody().length() > 500 ? pollResponse.getBody().substring(0, 500) + "..." : pollResponse.getBody())
+                        : "";
+                    throw new GooddataApiException(
+                        "Unexpected HTTP status during GoodData AFM result polling: " + status + ". Expected 200 (OK) or 202 (Accepted).",
+                        status,
+                        bodyExcerpt
+                    );
                 }
             }
 
