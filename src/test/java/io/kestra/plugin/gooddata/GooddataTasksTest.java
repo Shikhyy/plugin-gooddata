@@ -613,6 +613,7 @@ public class GooddataTasksTest {
 
         assertThat(output.getCount(), is(3));
         assertThat(output.getUri(), notNullValue());
+        assertThat(output.getTruncated(), is(false));
     }
 
     @Test
@@ -718,5 +719,114 @@ public class GooddataTasksTest {
         List.Output output = list.run(runContext);
 
         assertThat(output.getCount(), is(1));
+        assertThat(output.getTruncated(), is(false));
+    }
+
+    @Test
+    void testListWorkspacesTruncatedWhenMaxPagesReached() throws Exception {
+        wireMockServer.stubFor(get(urlEqualTo("/api/v1/entities/workspaces"))
+            .withHeader("Authorization", equalTo("Bearer test-token"))
+            .willReturn(aResponse()
+                .withStatus(200)
+                .withHeader("Content-Type", "application/json")
+                .withBody("{\"data\": [{\"id\": \"w1\"}], \"links\": {\"next\": \"/api/v1/entities/workspaces?page=1\"}}")));
+
+        wireMockServer.stubFor(get(urlEqualTo("/api/v1/entities/workspaces?page=1"))
+            .withHeader("Authorization", equalTo("Bearer test-token"))
+            .willReturn(aResponse()
+                .withStatus(200)
+                .withHeader("Content-Type", "application/json")
+                .withBody("{\"data\": [{\"id\": \"w2\"}], \"links\": {\"next\": \"/api/v1/entities/workspaces?page=2\"}}")));
+
+        List list = List.builder()
+            .id("list-truncation-test")
+            .url(Property.ofValue(serverUrl))
+            .apiToken(Property.ofValue("test-token"))
+            .maxPages(Property.ofValue(1))
+            .build();
+
+        RunContext runContext = runContextFactory.of();
+        List.Output output = list.run(runContext);
+
+        assertThat(output.getCount(), is(1));
+        assertThat(output.getTruncated(), is(true));
+    }
+
+    @Test
+    void testListWorkspacesMaxPagesZeroThrows() {
+        List list = List.builder()
+            .id("list-invalid-max-pages")
+            .url(Property.ofValue(serverUrl))
+            .apiToken(Property.ofValue("test-token"))
+            .maxPages(Property.ofValue(0))
+            .build();
+
+        RunContext runContext = runContextFactory.of();
+        IllegalArgumentException ex = assertThrows(IllegalArgumentException.class, () -> list.run(runContext));
+        assertThat(ex.getMessage(), containsString("'maxPages' must be greater than or equal to 1"));
+    }
+
+    @Test
+    void testTriggerWorkspaceListMultiPageWatermark() throws Exception {
+        wireMockServer.stubFor(get(urlEqualTo("/api/v1/entities/workspaces"))
+            .withHeader("Authorization", equalTo("Bearer secret-token"))
+            .willReturn(aResponse()
+                .withStatus(200)
+                .withHeader("Content-Type", "application/json")
+                .withBody("{\"data\": [{\"id\": \"w1\"}], \"links\": {\"next\": \"/api/v1/entities/workspaces?page=1\"}}")));
+
+        wireMockServer.stubFor(get(urlEqualTo("/api/v1/entities/workspaces?page=1"))
+            .withHeader("Authorization", equalTo("Bearer secret-token"))
+            .willReturn(aResponse()
+                .withStatus(200)
+                .withHeader("Content-Type", "application/json")
+                .withBody("{\"data\": [{\"id\": \"w2\"}], \"links\": {}}")));
+
+        String flowId = "flow-ws-list-" + IdUtils.create();
+        String triggerId = "trigger-ws-list-" + IdUtils.create();
+
+        Trigger trigger = Trigger.builder()
+            .id(triggerId)
+            .type(Trigger.class.getName())
+            .url(Property.ofValue(serverUrl))
+            .apiToken(Property.ofValue("secret-token"))
+            .build();
+
+        Flow flow = Flow.builder()
+            .tenantId("main")
+            .namespace("company.team")
+            .id(flowId)
+            .build();
+
+        TriggerContext triggerContext = TriggerContext.builder()
+            .tenantId("main")
+            .namespace("company.team")
+            .flowId(flowId)
+            .triggerId(triggerId)
+            .build();
+
+        RunContext runContext = runContextFactory.of(flow, trigger);
+        runContext = runContextFactory.initializer().forScheduler((DefaultRunContext) runContext, triggerContext, trigger);
+        ConditionContext conditionContext = ConditionContext.builder().runContext(runContext).flow(flow).build();
+
+        // 1. Initial poll seeds watermark
+        Optional<Execution> firstPoll = trigger.evaluate(conditionContext, triggerContext);
+        assertThat(firstPoll.isEmpty(), is(true));
+
+        // 2. Second poll with same pages returns empty
+        Optional<Execution> secondPoll = trigger.evaluate(conditionContext, triggerContext);
+        assertThat(secondPoll.isEmpty(), is(true));
+
+        // 3. Update page 2 by adding w3 - watermark must change and trigger must fire
+        wireMockServer.stubFor(get(urlEqualTo("/api/v1/entities/workspaces?page=1"))
+            .withHeader("Authorization", equalTo("Bearer secret-token"))
+            .willReturn(aResponse()
+                .withStatus(200)
+                .withHeader("Content-Type", "application/json")
+                .withBody("{\"data\": [{\"id\": \"w2\"}, {\"id\": \"w3\"}], \"links\": {}}")));
+
+        Optional<Execution> thirdPoll = trigger.evaluate(conditionContext, triggerContext);
+        assertThat(thirdPoll.isPresent(), is(true));
+        assertThat(thirdPoll.get().getTrigger(), notNullValue());
     }
 }
