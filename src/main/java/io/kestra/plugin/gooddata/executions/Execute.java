@@ -182,8 +182,15 @@ public class Execute extends AbstractGooddata implements RunnableTask<Execute.Ou
 
         if (!executionResultLink.isBlank()) {
             int lastSlash = executionResultLink.lastIndexOf('/');
+            // Raw ID is stored in the output; strip any query or fragment
             String rawId = lastSlash != -1 ? executionResultLink.substring(lastSlash + 1) : executionResultLink;
-            executionResultId = AbstractGooddata.encodePath(rawId);
+            if (rawId.contains("?")) {
+                rawId = rawId.substring(0, rawId.indexOf('?'));
+            }
+            if (rawId.contains("#")) {
+                rawId = rawId.substring(0, rawId.indexOf('#'));
+            }
+            executionResultId = rawId;
             logger.info("AFM execution started, result ID: {}", executionResultId);
 
             URI baseUri = URI.create(baseUrl);
@@ -251,7 +258,7 @@ public class Execute extends AbstractGooddata implements RunnableTask<Execute.Ou
 
             if (fetchedBody == null) {
                 throw new TimeoutException("AFM execution did not complete within timeout of "
-                    + renderedTimeout.getSeconds() + "s for resultId: " + executionResultId);
+                    + renderedTimeout.toMillis() + "ms for resultId: " + executionResultId);
             }
             resultJson = fetchedBody;
         } else {
