@@ -25,6 +25,7 @@ import org.junit.jupiter.api.Test;
 
 import java.time.Duration;
 import java.util.Optional;
+import java.util.concurrent.TimeoutException;
 
 import static com.github.tomakehurst.wiremock.client.WireMock.*;
 import static com.github.tomakehurst.wiremock.core.WireMockConfiguration.wireMockConfig;
@@ -372,5 +373,184 @@ public class GooddataTasksTest {
                 .withBody("{\"error\": \"Server failure\"}")));
 
         assertThrows(GooddataApiException.class, () -> trigger.evaluate(conditionContext, triggerContext));
+    }
+
+    @Test
+    void testExecuteAfmPollingTimeout() {
+        wireMockServer.stubFor(post(urlEqualTo("/api/v1/actions/workspaces/sales-workspace/execution/afm/execute"))
+            .willReturn(aResponse()
+                .withStatus(200)
+                .withHeader("Content-Type", "application/json")
+                .withBody("{\"executionResponse\": {\"links\": {\"executionResult\": \"/api/v1/actions/workspaces/sales-workspace/execution/afm/execute/result/res-timeout\"}}}")));
+
+        wireMockServer.stubFor(get(urlEqualTo("/api/v1/actions/workspaces/sales-workspace/execution/afm/execute/result/res-timeout"))
+            .willReturn(aResponse()
+                .withStatus(202)
+                .withHeader("Content-Type", "application/json")
+                .withBody("{\"status\": \"RUNNING\"}")));
+
+        Execute execute = Execute.builder()
+            .id("exec-timeout-test")
+            .url(Property.of(serverUrl))
+            .apiToken(Property.of("test-token"))
+            .workspaceId(Property.of("sales-workspace"))
+            .afmRequest(Property.of("{\"execution\": {}}"))
+            .timeout(Property.of(Duration.ofMillis(300)))
+            .pollInterval(Property.of(Duration.ofMillis(50)))
+            .build();
+
+        RunContext runContext = runContextFactory.of();
+        TimeoutException exception = assertThrows(TimeoutException.class, () -> execute.run(runContext));
+        assertThat(exception.getMessage(), containsString("AFM execution did not complete within timeout"));
+    }
+
+    @Test
+    void testExecuteAfmAbsoluteLinkRejectedOnForeignHost() {
+        wireMockServer.stubFor(post(urlEqualTo("/api/v1/actions/workspaces/sales-workspace/execution/afm/execute"))
+            .willReturn(aResponse()
+                .withStatus(200)
+                .withHeader("Content-Type", "application/json")
+                .withBody("{\"executionResponse\": {\"links\": {\"executionResult\": \"https://evil.attacker.com/leak/result\"}}}")));
+
+        Execute execute = Execute.builder()
+            .id("exec-ssrf-test")
+            .url(Property.of(serverUrl))
+            .apiToken(Property.of("test-token"))
+            .workspaceId(Property.of("sales-workspace"))
+            .afmRequest(Property.of("{\"execution\": {}}"))
+            .build();
+
+        RunContext runContext = runContextFactory.of();
+        SecurityException exception = assertThrows(SecurityException.class, () -> execute.run(runContext));
+        assertThat(exception.getMessage(), containsString("Untrusted executionResult host in GoodData response"));
+    }
+
+    @Test
+    void testExecuteAfmAbsoluteLinkAllowedOnSameHost() throws Exception {
+        wireMockServer.stubFor(post(urlEqualTo("/api/v1/actions/workspaces/sales-workspace/execution/afm/execute"))
+            .willReturn(aResponse()
+                .withStatus(200)
+                .withHeader("Content-Type", "application/json")
+                .withBody("{\"executionResponse\": {\"links\": {\"executionResult\": \"" + serverUrl + "/api/v1/actions/workspaces/sales-workspace/execution/afm/execute/result/res-absolute\"}}}")));
+
+        wireMockServer.stubFor(get(urlEqualTo("/api/v1/actions/workspaces/sales-workspace/execution/afm/execute/result/res-absolute"))
+            .willReturn(aResponse()
+                .withStatus(200)
+                .withHeader("Content-Type", "application/json")
+                .withBody("{\"data\": [[\"val-absolute\"]]}")));
+
+        Execute execute = Execute.builder()
+            .id("exec-abs-test")
+            .url(Property.of(serverUrl))
+            .apiToken(Property.of("test-token"))
+            .workspaceId(Property.of("sales-workspace"))
+            .afmRequest(Property.of("{\"execution\": {}}"))
+            .fetchType(Property.of(FetchType.FETCH))
+            .build();
+
+        RunContext runContext = runContextFactory.of();
+        Execute.Output output = execute.run(runContext);
+
+        assertThat(output.getExecutionResultId(), is("res-absolute"));
+        assertThat(output.getSize(), is(1));
+        assertThat(output.getRows(), notNullValue());
+    }
+
+    @Test
+    void testExecuteAfmFetchOne() throws Exception {
+        wireMockServer.stubFor(post(urlEqualTo("/api/v1/actions/workspaces/sales-workspace/execution/afm/execute"))
+            .willReturn(aResponse()
+                .withStatus(200)
+                .withHeader("Content-Type", "application/json")
+                .withBody("{\"executionResponse\": {\"links\": {\"executionResult\": \"/api/v1/actions/workspaces/sales-workspace/execution/afm/execute/result/res-fetch-one\"}}}")));
+
+        wireMockServer.stubFor(get(urlEqualTo("/api/v1/actions/workspaces/sales-workspace/execution/afm/execute/result/res-fetch-one"))
+            .willReturn(aResponse()
+                .withStatus(200)
+                .withHeader("Content-Type", "application/json")
+                .withBody("{\"data\": [[\"first_row\"], [\"second_row\"]]}")));
+
+        Execute execute = Execute.builder()
+            .id("exec-fetch-one-test")
+            .url(Property.of(serverUrl))
+            .apiToken(Property.of("test-token"))
+            .workspaceId(Property.of("sales-workspace"))
+            .afmRequest(Property.of("{\"execution\": {}}"))
+            .fetchType(Property.of(FetchType.FETCH_ONE))
+            .build();
+
+        RunContext runContext = runContextFactory.of();
+        Execute.Output output = execute.run(runContext);
+
+        assertThat(output.getExecutionResultId(), is("res-fetch-one"));
+        assertThat(output.getSize(), is(2));
+        assertThat(output.getRow(), notNullValue());
+        assertThat(output.getRows(), nullValue());
+    }
+
+    @Test
+    void testExecuteAfmDirectResponse() throws Exception {
+        wireMockServer.stubFor(post(urlEqualTo("/api/v1/actions/workspaces/sales-workspace/execution/afm/execute"))
+            .willReturn(aResponse()
+                .withStatus(200)
+                .withHeader("Content-Type", "application/json")
+                .withBody("{\"data\": [[\"direct_val\"]]}")));
+
+        Execute execute = Execute.builder()
+            .id("exec-direct-test")
+            .url(Property.of(serverUrl))
+            .apiToken(Property.of("test-token"))
+            .workspaceId(Property.of("sales-workspace"))
+            .afmRequest(Property.of("{\"execution\": {}}"))
+            .fetchType(Property.of(FetchType.FETCH))
+            .build();
+
+        RunContext runContext = runContextFactory.of();
+        Execute.Output output = execute.run(runContext);
+
+        assertThat(output.getSize(), is(1));
+        assertThat(output.getRows(), notNullValue());
+        assertThat(output.getExecutionResultId(), is(""));
+    }
+
+    @Test
+    void testExecuteAfmUnexpectedPollStatus() {
+        wireMockServer.stubFor(post(urlEqualTo("/api/v1/actions/workspaces/sales-workspace/execution/afm/execute"))
+            .willReturn(aResponse()
+                .withStatus(200)
+                .withHeader("Content-Type", "application/json")
+                .withBody("{\"executionResponse\": {\"links\": {\"executionResult\": \"/api/v1/actions/workspaces/sales-workspace/execution/afm/execute/result/res-unexpected\"}}}")));
+
+        wireMockServer.stubFor(get(urlEqualTo("/api/v1/actions/workspaces/sales-workspace/execution/afm/execute/result/res-unexpected"))
+            .willReturn(aResponse()
+                .withStatus(204)
+                .withHeader("Content-Type", "application/json")
+                .withBody("")));
+
+        Execute execute = Execute.builder()
+            .id("exec-unexpected-test")
+            .url(Property.of(serverUrl))
+            .apiToken(Property.of("test-token"))
+            .workspaceId(Property.of("sales-workspace"))
+            .afmRequest(Property.of("{\"execution\": {}}"))
+            .pollInterval(Property.of(Duration.ofMillis(50)))
+            .build();
+
+        RunContext runContext = runContextFactory.of();
+        GooddataApiException exception = assertThrows(GooddataApiException.class, () -> execute.run(runContext));
+        assertThat(exception.getStatusCode(), is(204));
+        assertThat(exception.getMessage(), containsString("Unexpected HTTP status during GoodData AFM result polling: 204"));
+    }
+
+    @Test
+    void testTriggerWatermarkIgnoresKeyOrderingAndFormatting() {
+        String json1 = "{\n  \"b\": 2,\n  \"a\": 1,\n  \"c\": [\"x\", \"y\"]\n}";
+        String json2 = "{\"c\":[\"x\",\"y\"],\"a\":1,\"b\":2}";
+
+        String canonical1 = Trigger.canonicalizeJson(json1);
+        String canonical2 = Trigger.canonicalizeJson(json2);
+
+        assertThat(canonical1, is(canonical2));
+        assertThat(canonical1, is("{\"a\":1,\"b\":2,\"c\":[\"x\",\"y\"]}"));
     }
 }
