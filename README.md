@@ -37,6 +37,10 @@
 
 # Kestra GoodData Plugin
 
+## Compatibility
+
+This plugin is compatible with both Kestra 1.3.x and Kestra 2.0.x. The plugin uses Kestra's core HTTP client and property APIs that are stable across both versions. Static analysis confirms all referenced classes, methods, and fields exist in Kestra core/model versions 1.3.39, 1.3.43, 2.0.4, and 2.0.6.
+
 ## Why
 
 - What user problem does this solve? Teams need a concrete starting point for building and validating new Kestra plugins without recreating the same project scaffolding from scratch.
