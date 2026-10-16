@@ -80,9 +80,14 @@ public abstract class AbstractGooddata extends Task {
 
     public static HttpClient createHttpClient(RunContext runContext, Duration timeout) throws IllegalVariableEvaluationException {
         Duration effectiveTimeout = timeout != null ? timeout : Duration.ofSeconds(60);
+        io.kestra.core.http.client.configurations.TimeoutConfiguration timeoutConfig =
+            io.kestra.core.http.client.configurations.TimeoutConfiguration.builder()
+                .connectTimeout(Property.ofValue(effectiveTimeout))
+                .readIdleTimeout(Property.ofValue(effectiveTimeout))
+                .build();
+
         HttpConfiguration config = HttpConfiguration.builder()
-            .connectTimeout(effectiveTimeout)
-            .readTimeout(effectiveTimeout)
+            .timeout(timeoutConfig)
             .allowFailed(Property.ofValue(true))
             .followRedirects(Property.ofValue(false))
             .build();
