@@ -94,24 +94,18 @@ public class WorkspaceList extends AbstractGooddata implements RunnableTask<Work
         var bytes = result.getConsolidatedJson().getBytes(StandardCharsets.UTF_8);
         var storageUri = runContext.storage().putFile(new ByteArrayInputStream(bytes), "workspaces.json");
 
-        var count = parseWorkspaceCount(result.getConsolidatedJson());
+        if (result.isTruncated()) {
+            logger.warn("GoodData workspace list reached maximum page limit of {} with remaining pages available. "
+                + "The results are truncated. Consider increasing 'maxPages'.", rMaxPages);
+        }
+
+        logger.info("Found {} workspaces", result.getCount());
 
         return Output.builder()
-            .count(count)
+            .count(result.getCount())
             .uri(storageUri)
             .truncated(result.isTruncated())
             .build();
-    }
-
-    private int parseWorkspaceCount(String json) {
-        try {
-            var mapper = io.kestra.core.serializers.JacksonMapper.ofJson();
-            var root = mapper.readTree(json);
-            var dataNode = root.path("data");
-            return dataNode.isArray() ? dataNode.size() : 0;
-        } catch (Exception e) {
-            return 0;
-        }
     }
 
     @Builder

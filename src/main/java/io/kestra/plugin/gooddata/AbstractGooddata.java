@@ -1,9 +1,5 @@
 package io.kestra.plugin.gooddata;
 
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.node.ArrayNode;
-import com.fasterxml.jackson.databind.node.ObjectNode;
 import io.kestra.core.exceptions.IllegalVariableEvaluationException;
 import io.kestra.core.http.HttpRequest;
 import io.kestra.core.http.HttpResponse;
@@ -103,15 +99,17 @@ public abstract class AbstractGooddata extends Task {
     }
 
     /**
-     * Result object for workspace pagination containing the consolidated JSON and truncation status.
+     * Result class for workspace pagination operations.
      */
     public static class WorkspacePagesResult {
         private final String consolidatedJson;
         private final boolean truncated;
+        private final int count;
 
-        public WorkspacePagesResult(String consolidatedJson, boolean truncated) {
+        public WorkspacePagesResult(String consolidatedJson, boolean truncated, int count) {
             this.consolidatedJson = consolidatedJson;
             this.truncated = truncated;
+            this.count = count;
         }
 
         public String getConsolidatedJson() {
@@ -120,6 +118,10 @@ public abstract class AbstractGooddata extends Task {
 
         public boolean isTruncated() {
             return truncated;
+        }
+
+        public int getCount() {
+            return count;
         }
     }
 
@@ -156,8 +158,6 @@ public abstract class AbstractGooddata extends Task {
         while (currentUrl != null && !currentUrl.isBlank()) {
             if (pageCount >= maxPages) {
                 isTruncated = true;
-                logger.warn("GoodData workspace list reached maximum page limit of {} with remaining pages available. "
-                    + "The results are truncated. Consider increasing 'maxPages'.", maxPages);
                 break;
             }
 
@@ -216,8 +216,7 @@ public abstract class AbstractGooddata extends Task {
             consolidatedJson = mapper.writeValueAsString(consolidated);
         }
 
-        logger.info("Found {} workspaces across {} page(s)", allWorkspaces.size(), pageCount);
-        return new WorkspacePagesResult(consolidatedJson, isTruncated);
+        return new WorkspacePagesResult(consolidatedJson, isTruncated, allWorkspaces.size());
     }
 
     protected String getRenderedApiToken(RunContext runContext) throws IllegalVariableEvaluationException {

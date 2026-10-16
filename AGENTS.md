@@ -7,7 +7,7 @@
   - `dataSources.Scan`: Scan data sources to discover new warehouse tables and update physical data models.
   - `executions.Execute`: Run Analytical Framework Model (AFM) queries with polling and flexible fetch/store modes.
   - `layouts.Export`: Export workspace layouts (logical data models and analytical dashboards) as declarative JSON.
-  - `workspaces.List`: List all GoodData workspaces.
+  - `workspaces.WorkspaceList`: List all GoodData workspaces.
   - `workspaces.Trigger`: Polling trigger detecting workspace and layout changes using deterministic canonical JSON hashing and Kestra's KV store.
 
 ## Why
@@ -36,7 +36,7 @@ All tasks inherit from `AbstractGooddata` for shared URL normalization, Bearer t
 - `io.kestra.plugin.gooddata.dataSources.Scan`: Scans a data source (`POST /api/v1/actions/dataSources/{id}/scan`).
 - `io.kestra.plugin.gooddata.executions.Execute`: Executes AFM analytics queries (`POST /api/v1/actions/workspaces/{id}/execution/afm/execute`), polls execution results, and supports `FETCH`, `FETCH_ONE`, or `STORE`.
 - `io.kestra.plugin.gooddata.layouts.Export`: Exports declarative workspace layout JSON (`GET /api/v1/layout/workspaces/{id}`).
-- `io.kestra.plugin.gooddata.workspaces.List`: Retrieves available workspaces (`GET /api/v1/entities/workspaces`).
+- `io.kestra.plugin.gooddata.workspaces.WorkspaceList`: Retrieves available workspaces (`GET /api/v1/entities/workspaces`).
 - `io.kestra.plugin.gooddata.workspaces.Trigger`: Polling trigger that detects layout/workspace changes using canonicalized JSON SHA-256 watermarks stored in Kestra's namespace KV Store.
 
 ### Project Structure
@@ -57,7 +57,7 @@ plugin-gooddata/
 │   │   └── Export.java
 │   └── workspaces/
 │       ├── package-info.java
-│       ├── List.java
+│       ├── WorkspaceList.java
 │       └── Trigger.java
 ├── src/main/resources/
 │   ├── doc/io.kestra.plugin.gooddata.md

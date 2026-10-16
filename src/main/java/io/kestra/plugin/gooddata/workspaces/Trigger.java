@@ -28,7 +28,6 @@ import lombok.experimental.SuperBuilder;
 import org.slf4j.Logger;
 
 import java.io.ByteArrayInputStream;
-import java.util.Set;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
@@ -38,6 +37,7 @@ import java.util.Collections;
 import java.util.HexFormat;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 
 /**
  * Polling trigger that fires when a GoodData workspace layout or workspace list changes
