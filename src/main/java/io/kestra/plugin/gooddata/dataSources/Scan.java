@@ -10,6 +10,7 @@ import io.kestra.core.models.annotations.PluginProperty;
 import io.kestra.core.models.property.Property;
 import io.kestra.core.models.tasks.RunnableTask;
 import io.kestra.core.runners.RunContext;
+import io.kestra.core.serializers.JacksonMapper;
 import io.kestra.plugin.gooddata.AbstractGooddata;
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotNull;
@@ -59,7 +60,7 @@ import java.nio.charset.StandardCharsets;
 )
 public class Scan extends AbstractGooddata implements RunnableTask<Scan.Output> {
 
-    private static final ObjectMapper MAPPER = new ObjectMapper();
+    private static final ObjectMapper MAPPER = JacksonMapper.ofJson();
 
     @Schema(
         title = "Data source ID",
@@ -71,22 +72,22 @@ public class Scan extends AbstractGooddata implements RunnableTask<Scan.Output> 
 
     @Override
     public Output run(RunContext runContext) throws Exception {
-        Logger logger = runContext.logger();
+        var logger = runContext.logger();
 
-        String baseUrl = validateAndNormalizeUrl(runContext.render(url).as(String.class).orElseThrow(
+        var rUrl = validateAndNormalizeUrl(runContext.render(url).as(String.class).orElseThrow(
             () -> new IllegalArgumentException("'url' must be provided")));
-        String renderedToken = getRenderedApiToken(runContext);
-        String renderedDsId = runContext.render(dataSourceId).as(String.class).orElseThrow(
+        var rToken = getRenderedApiToken(runContext);
+        var rDsId = runContext.render(dataSourceId).as(String.class).orElseThrow(
             () -> new IllegalArgumentException("'dataSourceId' must be provided"));
 
-        String encodedDsId = encodePath(renderedDsId);
-        String scanUrl = baseUrl + "/api/v1/actions/dataSources/" + encodedDsId + "/scan";
-        logger.info("Scanning GoodData data source '{}' at {}", renderedDsId, scanUrl);
+        var encodedDsId = encodePath(rDsId);
+        var scanUrl = rUrl + "/api/v1/actions/dataSources/" + encodedDsId + "/scan";
+        logger.info("Scanning GoodData data source '{}' at {}", rDsId, scanUrl);
 
-        HttpRequest request = HttpRequest.builder()
+        var request = HttpRequest.builder()
             .uri(URI.create(scanUrl))
             .method("POST")
-            .addHeader("Authorization", "Bearer " + renderedToken)
+            .addHeader("Authorization", "Bearer " + rToken)
             .addHeader("Content-Type", "application/json")
             .addHeader("Accept", "application/json")
             .body(HttpRequest.StringRequestBody.builder()
@@ -96,12 +97,12 @@ public class Scan extends AbstractGooddata implements RunnableTask<Scan.Output> 
                 .build())
             .build();
 
-        HttpResponse<String> response = executeRequest(runContext, request);
-        String rawJson = response.getBody() != null ? response.getBody() : "{}";
+        var response = executeRequest(runContext, request);
+        var rawJson = response.getBody() != null ? response.getBody() : "{}";
 
         // Count tables: response shape is {"pdm":{"tables":[...]}}
-        JsonNode root = MAPPER.readTree(rawJson);
-        int tablesFound = root.path("pdm").path("tables").size();
+        var root = MAPPER.readTree(rawJson);
+        var tablesFound = root.path("pdm").path("tables").size();
         if (tablesFound == 0) {
             // Fallback: try "pdm.datasets" or top-level "tables"
             tablesFound = root.path("pdm").path("datasets").size();
@@ -114,7 +115,7 @@ public class Scan extends AbstractGooddata implements RunnableTask<Scan.Output> 
         }
         logger.info("Data source scan found {} tables", tablesFound);
 
-        URI storageUri = runContext.storage().putFile(
+        var storageUri = runContext.storage().putFile(
             new ByteArrayInputStream(rawJson.getBytes(StandardCharsets.UTF_8)),
             "scan.json");
 

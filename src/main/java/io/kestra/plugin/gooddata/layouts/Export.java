@@ -10,6 +10,7 @@ import io.kestra.core.models.annotations.PluginProperty;
 import io.kestra.core.models.property.Property;
 import io.kestra.core.models.tasks.RunnableTask;
 import io.kestra.core.runners.RunContext;
+import io.kestra.core.serializers.JacksonMapper;
 import io.kestra.plugin.gooddata.AbstractGooddata;
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotNull;
@@ -59,7 +60,7 @@ import java.nio.charset.StandardCharsets;
 )
 public class Export extends AbstractGooddata implements RunnableTask<Export.Output> {
 
-    private static final ObjectMapper MAPPER = new ObjectMapper();
+    private static final ObjectMapper MAPPER = JacksonMapper.ofJson();
 
     @Schema(
         title = "Workspace ID",
@@ -71,31 +72,31 @@ public class Export extends AbstractGooddata implements RunnableTask<Export.Outp
 
     @Override
     public Output run(RunContext runContext) throws Exception {
-        Logger logger = runContext.logger();
+        var logger = runContext.logger();
 
-        String baseUrl = validateAndNormalizeUrl(runContext.render(url).as(String.class).orElseThrow(
+        var rUrl = validateAndNormalizeUrl(runContext.render(url).as(String.class).orElseThrow(
             () -> new IllegalArgumentException("'url' must be provided")));
-        String renderedToken = getRenderedApiToken(runContext);
-        String renderedWsId = runContext.render(workspaceId).as(String.class).orElseThrow(
+        var rToken = getRenderedApiToken(runContext);
+        var rWsId = runContext.render(workspaceId).as(String.class).orElseThrow(
             () -> new IllegalArgumentException("'workspaceId' must be provided"));
 
-        String encodedWsId = encodePath(renderedWsId);
-        String layoutUrl = baseUrl + "/api/v1/layout/workspaces/" + encodedWsId;
+        var encodedWsId = encodePath(rWsId);
+        var layoutUrl = rUrl + "/api/v1/layout/workspaces/" + encodedWsId;
         logger.info("Exporting workspace layout from {}", layoutUrl);
 
-        HttpRequest request = HttpRequest.builder()
+        var request = HttpRequest.builder()
             .uri(URI.create(layoutUrl))
             .method("GET")
-            .addHeader("Authorization", "Bearer " + renderedToken)
+            .addHeader("Authorization", "Bearer " + rToken)
             .addHeader("Accept", "application/json")
             .build();
 
-        HttpResponse<String> response = executeRequest(runContext, request);
-        String rawJson = response.getBody() != null ? response.getBody() : "{}";
+        var response = executeRequest(runContext, request);
+        var rawJson = response.getBody() != null ? response.getBody() : "{}";
 
         // Count LDM datasets: response shape uses ldm.datasets
-        JsonNode root = MAPPER.readTree(rawJson);
-        int datasetCount = root.path("ldm").path("datasets").size();
+        var root = MAPPER.readTree(rawJson);
+        var datasetCount = root.path("ldm").path("datasets").size();
         if (datasetCount == 0) {
             // Fallback: workspaceLayout.ldm.datasets
             datasetCount = root.path("workspaceLayout").path("ldm").path("datasets").size();
@@ -105,7 +106,7 @@ public class Export extends AbstractGooddata implements RunnableTask<Export.Outp
         }
         logger.info("Workspace layout contains {} datasets", datasetCount);
 
-        URI storageUri = runContext.storage().putFile(
+        var storageUri = runContext.storage().putFile(
             new ByteArrayInputStream(rawJson.getBytes(StandardCharsets.UTF_8)),
             "layout.json");
 

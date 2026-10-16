@@ -5,6 +5,7 @@ import io.kestra.core.http.HttpRequest;
 import io.kestra.core.http.HttpResponse;
 import io.kestra.core.http.client.HttpClient;
 import io.kestra.core.http.client.configurations.HttpConfiguration;
+import io.kestra.core.http.client.configurations.TimeoutConfiguration;
 import io.kestra.core.models.annotations.PluginProperty;
 import io.kestra.core.models.property.Property;
 import io.kestra.core.models.tasks.Task;
@@ -66,7 +67,7 @@ public abstract class AbstractGooddata extends Task {
         if (rawUrl == null || rawUrl.isBlank()) {
             throw new IllegalArgumentException("'url' must be provided");
         }
-        String trimmed = rawUrl.trim();
+        var trimmed = rawUrl.trim();
         if (!trimmed.startsWith("http://") && !trimmed.startsWith("https://")) {
             throw new IllegalArgumentException("GoodData URL must start with 'http://' or 'https://', got: " + trimmed);
         }
@@ -74,19 +75,19 @@ public abstract class AbstractGooddata extends Task {
     }
 
     protected String getRenderedApiToken(RunContext runContext) throws IllegalVariableEvaluationException {
-        return runContext.render(this.apiToken).as(String.class).orElseThrow(
+        var rToken = runContext.render(this.apiToken).as(String.class).orElseThrow(
             () -> new IllegalArgumentException("'apiToken' must be provided"));
+        return rToken;
     }
 
     public static HttpClient createHttpClient(RunContext runContext, Duration timeout) throws IllegalVariableEvaluationException {
-        Duration effectiveTimeout = timeout != null ? timeout : Duration.ofSeconds(60);
-        io.kestra.core.http.client.configurations.TimeoutConfiguration timeoutConfig =
-            io.kestra.core.http.client.configurations.TimeoutConfiguration.builder()
-                .connectTimeout(Property.ofValue(effectiveTimeout))
-                .readIdleTimeout(Property.ofValue(effectiveTimeout))
-                .build();
+        var effectiveTimeout = timeout != null ? timeout : Duration.ofSeconds(60);
+        var timeoutConfig = TimeoutConfiguration.builder()
+            .connectTimeout(Property.ofValue(effectiveTimeout))
+            .readIdleTimeout(Property.ofValue(effectiveTimeout))
+            .build();
 
-        HttpConfiguration config = HttpConfiguration.builder()
+        var config = HttpConfiguration.builder()
             .timeout(timeoutConfig)
             .allowFailed(Property.ofValue(true))
             .followRedirects(Property.ofValue(false))
@@ -95,20 +96,22 @@ public abstract class AbstractGooddata extends Task {
     }
 
     protected HttpResponse<String> executeRequest(RunContext runContext, HttpRequest request) throws Exception {
-        Duration renderedTimeout = this.requestTimeout != null ? runContext.render(this.requestTimeout).as(Duration.class).orElse(Duration.ofSeconds(60)) : Duration.ofSeconds(60);
-        return execute(runContext, request, renderedTimeout);
+        var rRequestTimeout = this.requestTimeout != null
+            ? runContext.render(this.requestTimeout).as(Duration.class).orElse(Duration.ofSeconds(60))
+            : Duration.ofSeconds(60);
+        return execute(runContext, request, rRequestTimeout);
     }
 
     public static HttpResponse<String> execute(RunContext runContext, HttpRequest request, Duration timeout) throws Exception {
-        try (HttpClient client = createHttpClient(runContext, timeout)) {
-            HttpResponse<String> response = client.request(request, String.class);
-            int statusCode = response.getStatus() != null ? response.getStatus().getCode() : 0;
+        try (var client = createHttpClient(runContext, timeout)) {
+            var response = client.request(request, String.class);
+            var statusCode = response.getStatus() != null ? response.getStatus().getCode() : 0;
             if (statusCode < 200 || statusCode >= 300) {
-                String responseBody = response.getBody();
-                String excerpt = responseBody != null
+                var responseBody = response.getBody();
+                var excerpt = responseBody != null
                     ? (responseBody.length() > 500 ? responseBody.substring(0, 500) + "..." : responseBody)
                     : "";
-                String hint = switch (statusCode) {
+                var hint = switch (statusCode) {
                     case 401 -> "Check that your API token is valid and not expired.";
                     case 403 -> "Check that your API token has sufficient permissions for this operation.";
                     case 404 -> "Check that the requested resource, data source, or workspace ID exists.";
