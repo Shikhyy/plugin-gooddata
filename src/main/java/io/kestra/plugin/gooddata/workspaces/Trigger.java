@@ -1,5 +1,7 @@
 package io.kestra.plugin.gooddata.workspaces;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import io.kestra.core.http.HttpRequest;
 import io.kestra.core.http.HttpResponse;
 import io.kestra.core.models.annotations.Example;
@@ -17,8 +19,6 @@ import io.kestra.core.runners.RunContext;
 import io.kestra.core.storages.kv.KVStore;
 import io.kestra.core.storages.kv.KVValue;
 import io.kestra.core.storages.kv.KVValueAndMetadata;
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import io.kestra.plugin.gooddata.AbstractGooddata;
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotNull;
@@ -129,6 +129,8 @@ public class Trigger extends AbstractTrigger implements PollingTriggerInterface,
         return interval;
     }
 
+    private static final ObjectMapper MAPPER = new ObjectMapper();
+
     @Override
     public Optional<Execution> evaluate(ConditionContext conditionContext, TriggerContext triggerContext) throws Exception {
         RunContext runContext = conditionContext.getRunContext();
@@ -219,8 +221,6 @@ public class Trigger extends AbstractTrigger implements PollingTriggerInterface,
         Execution execution = TriggerService.generateExecution(this, conditionContext, triggerContext, output);
         return Optional.of(execution);
     }
-
-    private static final ObjectMapper MAPPER = new ObjectMapper();
 
     /**
      * Produces a deterministic canonical string representation of a JSON document by recursively
