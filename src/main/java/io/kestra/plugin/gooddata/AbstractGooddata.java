@@ -146,7 +146,7 @@ public abstract class AbstractGooddata extends Task {
         Logger logger
     ) throws Exception {
         var mapper = JacksonMapper.ofJson();
-        var currentUrl = baseUrl + "/api/v1/entities/workspaces";
+        var currentUrl = baseUrl + "/api/v1/entities/workspaces?sort=id";
         var allWorkspaces = mapper.createArrayNode();
         String firstPageJson = null;
         var pageCount = 0;
@@ -272,17 +272,23 @@ public abstract class AbstractGooddata extends Task {
                 );
             }
 
-            // Warn on large responses (KPS-08: response bodies read into memory)
+            // Hard size cap before parsing (KPS-08: prevent memory exhaustion from unbounded response bodies)
             var responseBody = response.getBody();
-            if (responseBody != null && responseBody.length() > 10_000_000) {
-                runContext.logger().warn(
-                    "GoodData API response body is large ({} bytes). This may impact memory usage. "
-                    + "Consider reducing the query scope or using pagination.",
-                    responseBody.length()
+            if (responseBody != null && responseBody.length() > MAX_RESPONSE_BODY_CHARS) {
+                throw new IllegalStateException(
+                    "GoodData API response body exceeds the maximum permitted limit of "
+                    + MAX_RESPONSE_BODY_CHARS + " characters (" + responseBody.length() + " chars). "
+                    + "Request rejected before parsing to prevent memory exhaustion."
                 );
             }
 
             return response;
         }
     }
+
+    /**
+     * Maximum permitted response body length in characters (10,000,000 chars, ~10 MB).
+     * Responses exceeding this limit are rejected to prevent memory exhaustion (KPS-08).
+     */
+    public static final int MAX_RESPONSE_BODY_CHARS = 10_000_000;
 }

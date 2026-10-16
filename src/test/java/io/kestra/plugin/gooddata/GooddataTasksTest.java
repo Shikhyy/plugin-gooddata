@@ -216,7 +216,7 @@ public class GooddataTasksTest {
 
     @Test
     void testListWorkspacesSuccess() throws Exception {
-        wireMockServer.stubFor(get(urlEqualTo("/api/v1/entities/workspaces"))
+        wireMockServer.stubFor(get(urlEqualTo("/api/v1/entities/workspaces?sort=id"))
             .withHeader("Authorization", equalTo("Bearer test-token"))
             .willReturn(aResponse()
                 .withStatus(200)
@@ -588,7 +588,7 @@ public class GooddataTasksTest {
 
     @Test
     void testListWorkspacesPagination() throws Exception {
-        wireMockServer.stubFor(get(urlEqualTo("/api/v1/entities/workspaces"))
+        wireMockServer.stubFor(get(urlEqualTo("/api/v1/entities/workspaces?sort=id"))
             .withHeader("Authorization", equalTo("Bearer test-token"))
             .willReturn(aResponse()
                 .withStatus(200)
@@ -618,7 +618,7 @@ public class GooddataTasksTest {
 
     @Test
     void testListWorkspacesForeignNextLinkRejected() {
-        wireMockServer.stubFor(get(urlEqualTo("/api/v1/entities/workspaces"))
+        wireMockServer.stubFor(get(urlEqualTo("/api/v1/entities/workspaces?sort=id"))
             .withHeader("Authorization", equalTo("Bearer test-token"))
             .willReturn(aResponse()
                 .withStatus(200)
@@ -702,12 +702,12 @@ public class GooddataTasksTest {
 
     @Test
     void testListWorkspacesCircularPaginationHalts() throws Exception {
-        wireMockServer.stubFor(get(urlEqualTo("/api/v1/entities/workspaces"))
+        wireMockServer.stubFor(get(urlEqualTo("/api/v1/entities/workspaces?sort=id"))
             .withHeader("Authorization", equalTo("Bearer test-token"))
             .willReturn(aResponse()
                 .withStatus(200)
                 .withHeader("Content-Type", "application/json")
-                .withBody("{\"data\": [{\"id\": \"w1\"}], \"links\": {\"next\": \"/api/v1/entities/workspaces\"}}")));
+                .withBody("{\"data\": [{\"id\": \"w1\"}], \"links\": {\"next\": \"/api/v1/entities/workspaces?sort=id\"}}")));
 
         WorkspaceList list = WorkspaceList.builder()
             .id("list-circular-test")
@@ -724,7 +724,7 @@ public class GooddataTasksTest {
 
     @Test
     void testListWorkspacesTruncatedWhenMaxPagesReached() throws Exception {
-        wireMockServer.stubFor(get(urlEqualTo("/api/v1/entities/workspaces"))
+        wireMockServer.stubFor(get(urlEqualTo("/api/v1/entities/workspaces?sort=id"))
             .withHeader("Authorization", equalTo("Bearer test-token"))
             .willReturn(aResponse()
                 .withStatus(200)
@@ -768,7 +768,7 @@ public class GooddataTasksTest {
 
     @Test
     void testTriggerWorkspaceListMultiPageWatermark() throws Exception {
-        wireMockServer.stubFor(get(urlEqualTo("/api/v1/entities/workspaces"))
+        wireMockServer.stubFor(get(urlEqualTo("/api/v1/entities/workspaces?sort=id"))
             .withHeader("Authorization", equalTo("Bearer secret-token"))
             .willReturn(aResponse()
                 .withStatus(200)
@@ -828,5 +828,26 @@ public class GooddataTasksTest {
         Optional<Execution> thirdPoll = trigger.evaluate(conditionContext, triggerContext);
         assertThat(thirdPoll.isPresent(), is(true));
         assertThat(thirdPoll.get().getTrigger(), notNullValue());
+    }
+
+    @Test
+    void testResponseBodyExceedsHardCapThrows() {
+        var largeBody = "x".repeat(AbstractGooddata.MAX_RESPONSE_BODY_CHARS + 1);
+        wireMockServer.stubFor(get(urlEqualTo("/api/v1/layout/workspaces/large-workspace"))
+            .willReturn(aResponse()
+                .withStatus(200)
+                .withHeader("Content-Type", "application/json")
+                .withBody(largeBody)));
+
+        Export export = Export.builder()
+            .id("export-large")
+            .url(Property.ofValue(serverUrl))
+            .apiToken(Property.ofValue("test-token"))
+            .workspaceId(Property.ofValue("large-workspace"))
+            .build();
+
+        RunContext runContext = runContextFactory.of();
+        IllegalStateException ex = assertThrows(IllegalStateException.class, () -> export.run(runContext));
+        assertThat(ex.getMessage(), containsString("exceeds the maximum permitted limit"));
     }
 }

@@ -39,7 +39,7 @@
 
 ## Compatibility
 
-This plugin is compatible with both Kestra 1.3.x and Kestra 2.0.x. The plugin uses Kestra's core HTTP client and property APIs that are stable across both versions. Static analysis confirms all referenced classes, methods, and fields exist in Kestra core/model versions 1.3.39, 1.3.43, 2.0.4, and 2.0.6.
+This plugin is designed for Kestra 1.3.x and 2.0.x. It targets Kestra 1.3.39 APIs and uses cross-version compatible HTTP client and property constructs (`Property.ofValue(...)`, `TimeoutConfiguration`). Static bytecode verification confirms all 55 referenced members across 40 classes exist in Kestra core/model 1.3.39, 1.3.43, 2.0.4, and 2.0.6. Functional verification has been confirmed on Kestra 1.3.43 (see `KESTRA_2_0_TESTING.md` for running verification on 2.0.x images).
 
 ## Why
 
