@@ -17,6 +17,8 @@ import io.kestra.core.runners.RunContext;
 import io.kestra.core.storages.kv.KVStore;
 import io.kestra.core.storages.kv.KVValue;
 import io.kestra.core.storages.kv.KVValueAndMetadata;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import io.kestra.plugin.gooddata.AbstractGooddata;
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotNull;
@@ -29,7 +31,10 @@ import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.time.Duration;
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HexFormat;
+import java.util.List;
 import java.util.Optional;
 
 /**
@@ -167,9 +172,10 @@ public class Trigger extends AbstractTrigger implements PollingTriggerInterface,
         HttpResponse<String> response = AbstractGooddata.execute(runContext, request, renderedTimeout);
         String rawJson = response.getBody() != null ? response.getBody() : "{}";
 
-        // Calculate watermark fingerprint via SHA-256
+        // Calculate watermark fingerprint via canonicalized SHA-256 (stable across key ordering and whitespace)
+        String canonicalJson = canonicalizeJson(rawJson);
         MessageDigest digest = MessageDigest.getInstance("SHA-256");
-        byte[] hash = digest.digest(rawJson.getBytes(StandardCharsets.UTF_8));
+        byte[] hash = digest.digest(canonicalJson.getBytes(StandardCharsets.UTF_8));
         String currentWatermark = HexFormat.of().formatHex(hash);
 
         // Watermark KV key scoped per flow and trigger to prevent missed/duplicated events across flows
@@ -212,6 +218,72 @@ public class Trigger extends AbstractTrigger implements PollingTriggerInterface,
 
         Execution execution = TriggerService.generateExecution(this, conditionContext, triggerContext, output);
         return Optional.of(execution);
+    }
+
+    private static final ObjectMapper MAPPER = new ObjectMapper();
+
+    /**
+     * Produces a deterministic canonical string representation of a JSON document by recursively
+     * sorting object keys alphabetically and removing insignificant whitespace.
+     */
+    public static String canonicalizeJson(String json) {
+        if (json == null || json.isBlank()) {
+            return "{}";
+        }
+        try {
+            JsonNode root = MAPPER.readTree(json);
+            StringBuilder sb = new StringBuilder();
+            canonicalizeNode(root, sb);
+            return sb.toString();
+        } catch (Exception e) {
+            return json.trim();
+        }
+    }
+
+    private static void canonicalizeNode(JsonNode node, StringBuilder sb) {
+        if (node == null || node.isNull()) {
+            sb.append("null");
+        } else if (node.isBoolean()) {
+            sb.append(node.asBoolean());
+        } else if (node.isNumber()) {
+            sb.append(node.asText());
+        } else if (node.isTextual()) {
+            try {
+                sb.append(MAPPER.writeValueAsString(node.asText()));
+            } catch (Exception e) {
+                sb.append("\"").append(node.asText().replace("\"", "\\\"")).append("\"");
+            }
+        } else if (node.isArray()) {
+            sb.append("[");
+            for (int i = 0; i < node.size(); i++) {
+                if (i > 0) {
+                    sb.append(",");
+                }
+                canonicalizeNode(node.get(i), sb);
+            }
+            sb.append("]");
+        } else if (node.isObject()) {
+            sb.append("{");
+            List<String> fieldNames = new ArrayList<>();
+            node.fieldNames().forEachRemaining(fieldNames::add);
+            Collections.sort(fieldNames);
+            for (int i = 0; i < fieldNames.size(); i++) {
+                if (i > 0) {
+                    sb.append(",");
+                }
+                String key = fieldNames.get(i);
+                try {
+                    sb.append(MAPPER.writeValueAsString(key));
+                } catch (Exception e) {
+                    sb.append("\"").append(key.replace("\"", "\\\"")).append("\"");
+                }
+                sb.append(":");
+                canonicalizeNode(node.get(key), sb);
+            }
+            sb.append("}");
+        } else {
+            sb.append(node.toString());
+        }
     }
 
     @Builder
