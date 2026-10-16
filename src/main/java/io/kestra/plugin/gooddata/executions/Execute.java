@@ -214,9 +214,7 @@ public class Execute extends AbstractGooddata implements RunnableTask<Execute.Ou
 
             int lastSlash = trimmedLink.lastIndexOf('/');
             String rawId = lastSlash != -1 ? trimmedLink.substring(lastSlash + 1) : trimmedLink;
-            String query = "";
             if (rawId.contains("?")) {
-                query = rawId.substring(rawId.indexOf('?'));
                 rawId = rawId.substring(0, rawId.indexOf('?'));
             }
             if (rawId.contains("#")) {
@@ -225,11 +223,17 @@ public class Execute extends AbstractGooddata implements RunnableTask<Execute.Ou
             try {
                 rawId = java.net.URLDecoder.decode(rawId, StandardCharsets.UTF_8);
             } catch (Exception ignored) {}
+
+            rawId = rawId != null ? rawId.trim() : "";
+            if (rawId.isBlank() || ".".equals(rawId) || "..".equals(rawId)) {
+                throw new IllegalArgumentException("Invalid GoodData executionResult identifier: '" + rawId + "'");
+            }
+
             executionResultId = rawId;
             logger.info("AFM execution started, result ID: {}", executionResultId);
 
             String resultUrl = baseUrl + "/api/v1/actions/workspaces/" + encodedWsId
-                + "/execution/afm/execute/result/" + encodePath(rawId) + query;
+                + "/execution/afm/execute/result/" + encodePath(rawId);
 
             long startTime = System.currentTimeMillis();
             long maxDurationMs = renderedMaxPollDuration.toMillis();
