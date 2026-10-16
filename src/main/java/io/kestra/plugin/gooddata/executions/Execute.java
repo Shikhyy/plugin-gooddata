@@ -12,6 +12,7 @@ import io.kestra.core.models.property.Property;
 import io.kestra.core.models.tasks.RunnableTask;
 import io.kestra.core.models.tasks.common.FetchType;
 import io.kestra.core.runners.RunContext;
+import io.kestra.core.serializers.JacksonMapper;
 import io.kestra.plugin.gooddata.AbstractGooddata;
 import io.kestra.plugin.gooddata.GooddataApiException;
 import io.swagger.v3.oas.annotations.media.Schema;
@@ -22,10 +23,10 @@ import org.slf4j.Logger;
 
 import java.io.ByteArrayInputStream;
 import java.net.URI;
+import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.List;
-import java.util.Objects;
 import java.util.concurrent.TimeoutException;
 
 /**
@@ -69,7 +70,7 @@ import java.util.concurrent.TimeoutException;
                               "localIdentifier": "m1",
                               "definition": {
                                 "measure": {
-                                  "item": { "identifier": "measure/revenue", "type": "measure" }
+                                  "item": { "identifier": { "id": "revenue", "type": "metric" } }
                                 }
                               }
                             }
@@ -89,7 +90,7 @@ import java.util.concurrent.TimeoutException;
 )
 public class Execute extends AbstractGooddata implements RunnableTask<Execute.Output> {
 
-    private static final ObjectMapper MAPPER = new ObjectMapper();
+    private static final ObjectMapper MAPPER = JacksonMapper.ofJson();
 
     @Schema(
         title = "Workspace ID",
@@ -134,50 +135,50 @@ public class Execute extends AbstractGooddata implements RunnableTask<Execute.Ou
 
     @Override
     public Output run(RunContext runContext) throws Exception {
-        Logger logger = runContext.logger();
+        var logger = runContext.logger();
 
-        String baseUrl       = validateAndNormalizeUrl(runContext.render(url).as(String.class).orElseThrow(
+        var rUrl = validateAndNormalizeUrl(runContext.render(url).as(String.class).orElseThrow(
             () -> new IllegalArgumentException("'url' must be provided")));
-        String renderedToken = getRenderedApiToken(runContext);
-        String renderedWsId  = runContext.render(workspaceId).as(String.class).orElseThrow(
+        var rToken = getRenderedApiToken(runContext);
+        var rWsId = runContext.render(workspaceId).as(String.class).orElseThrow(
             () -> new IllegalArgumentException("'workspaceId' must be provided"));
-        String renderedAfm   = runContext.render(afmRequest).as(String.class).orElseThrow(
+        var rAfm = runContext.render(afmRequest).as(String.class).orElseThrow(
             () -> new IllegalArgumentException("'afmRequest' must be provided"));
 
-        FetchType renderedFetchType = this.fetchType != null
+        var rFetchType = this.fetchType != null
             ? runContext.render(this.fetchType).as(FetchType.class).orElse(FetchType.STORE)
             : FetchType.STORE;
 
-        Duration renderedMaxPollDuration = this.maxPollDuration != null
+        var rMaxPollDuration = this.maxPollDuration != null
             ? runContext.render(this.maxPollDuration).as(Duration.class).orElse(Duration.ofSeconds(60))
             : Duration.ofSeconds(60);
 
-        Duration renderedPollInterval = this.pollInterval != null
+        var rPollInterval = this.pollInterval != null
             ? runContext.render(this.pollInterval).as(Duration.class).orElse(Duration.ofSeconds(1))
             : Duration.ofSeconds(1);
 
-        String encodedWsId = encodePath(renderedWsId);
-        String executeUrl  = baseUrl + "/api/v1/actions/workspaces/" + encodedWsId + "/execution/afm/execute";
+        var encodedWsId = encodePath(rWsId);
+        var executeUrl = rUrl + "/api/v1/actions/workspaces/" + encodedWsId + "/execution/afm/execute";
         logger.info("Executing GoodData AFM query at {}", executeUrl);
 
-        HttpRequest executeRequest = HttpRequest.builder()
+        var executeRequest = HttpRequest.builder()
             .uri(URI.create(executeUrl))
             .method("POST")
-            .addHeader("Authorization", "Bearer " + renderedToken)
+            .addHeader("Authorization", "Bearer " + rToken)
             .addHeader("Content-Type", "application/json")
             .addHeader("Accept", "application/json")
             .body(HttpRequest.StringRequestBody.builder()
-                .content(renderedAfm)
+                .content(rAfm)
                 .contentType("application/json")
                 .charset(StandardCharsets.UTF_8)
                 .build())
             .build();
 
-        HttpResponse<String> executeResponse = executeRequest(runContext, executeRequest);
-        String executeJson = executeResponse.getBody() != null ? executeResponse.getBody() : "{}";
+        var executeResponse = executeRequest(runContext, executeRequest);
+        var executeJson = executeResponse.getBody() != null ? executeResponse.getBody() : "{}";
 
-        JsonNode executeRoot = MAPPER.readTree(executeJson);
-        String executionResultLink = executeRoot.path("executionResponse")
+        var executeRoot = MAPPER.readTree(executeJson);
+        var executionResultLink = executeRoot.path("executionResponse")
             .path("links")
             .path("executionResult")
             .asText("");
@@ -191,16 +192,16 @@ public class Execute extends AbstractGooddata implements RunnableTask<Execute.Ou
             executionResultLink = executeRoot.path("executionResult").asText("");
         }
 
-        String executionResultId = "";
+        var executionResultId = "";
         String resultJson;
 
         if (!executionResultLink.isBlank()) {
-            String trimmedLink = executionResultLink.trim().replaceAll("/+$", "");
+            var trimmedLink = executionResultLink.trim().replaceAll("/+$", "");
             if (trimmedLink.startsWith("http://") || trimmedLink.startsWith("https://")) {
-                URI resultUri = URI.create(trimmedLink);
-                URI baseUri = URI.create(baseUrl);
-                int basePort = baseUri.getPort() != -1 ? baseUri.getPort() : ("https".equalsIgnoreCase(baseUri.getScheme()) ? 443 : 80);
-                int resultPort = resultUri.getPort() != -1 ? resultUri.getPort() : ("https".equalsIgnoreCase(resultUri.getScheme()) ? 443 : 80);
+                var resultUri = URI.create(trimmedLink);
+                var baseUri = URI.create(rUrl);
+                var basePort = baseUri.getPort() != -1 ? baseUri.getPort() : ("https".equalsIgnoreCase(baseUri.getScheme()) ? 443 : 80);
+                var resultPort = resultUri.getPort() != -1 ? resultUri.getPort() : ("https".equalsIgnoreCase(resultUri.getScheme()) ? 443 : 80);
 
                 if (resultUri.getHost() == null
                     || !resultUri.getHost().equalsIgnoreCase(baseUri.getHost())
@@ -208,12 +209,12 @@ public class Execute extends AbstractGooddata implements RunnableTask<Execute.Ou
                     || !resultUri.getScheme().equalsIgnoreCase(baseUri.getScheme())
                     || basePort != resultPort) {
                     throw new SecurityException("Untrusted executionResult host in GoodData response: '"
-                        + resultUri + "' does not match configured base URL '" + baseUrl + "'");
+                        + resultUri + "' does not match configured base URL '" + rUrl + "'");
                 }
             }
 
-            int lastSlash = trimmedLink.lastIndexOf('/');
-            String rawId = lastSlash != -1 ? trimmedLink.substring(lastSlash + 1) : trimmedLink;
+            var lastSlash = trimmedLink.lastIndexOf('/');
+            var rawId = lastSlash != -1 ? trimmedLink.substring(lastSlash + 1) : trimmedLink;
             if (rawId.contains("?")) {
                 rawId = rawId.substring(0, rawId.indexOf('?'));
             }
@@ -221,7 +222,7 @@ public class Execute extends AbstractGooddata implements RunnableTask<Execute.Ou
                 rawId = rawId.substring(0, rawId.indexOf('#'));
             }
             try {
-                rawId = java.net.URLDecoder.decode(rawId, StandardCharsets.UTF_8);
+                rawId = URLDecoder.decode(rawId, StandardCharsets.UTF_8);
             } catch (Exception ignored) {}
 
             rawId = rawId != null ? rawId.trim() : "";
@@ -232,26 +233,26 @@ public class Execute extends AbstractGooddata implements RunnableTask<Execute.Ou
             executionResultId = rawId;
             logger.info("AFM execution started, result ID: {}", executionResultId);
 
-            String resultUrl = baseUrl + "/api/v1/actions/workspaces/" + encodedWsId
+            var resultUrl = rUrl + "/api/v1/actions/workspaces/" + encodedWsId
                 + "/execution/afm/execute/result/" + encodePath(rawId);
 
-            long startTime = System.currentTimeMillis();
-            long maxDurationMs = renderedMaxPollDuration.toMillis();
-            long pollIntervalMs = Math.max(100, renderedPollInterval.toMillis());
-            int attempts = 0;
+            var startTime = System.currentTimeMillis();
+            var maxDurationMs = rMaxPollDuration.toMillis();
+            var pollIntervalMs = Math.max(100, rPollInterval.toMillis());
+            var attempts = 0;
             String fetchedBody = null;
 
             while (System.currentTimeMillis() - startTime < maxDurationMs) {
                 attempts++;
-                HttpRequest pollRequest = HttpRequest.builder()
+                var pollRequest = HttpRequest.builder()
                     .uri(URI.create(resultUrl))
                     .method("GET")
-                    .addHeader("Authorization", "Bearer " + renderedToken)
+                    .addHeader("Authorization", "Bearer " + rToken)
                     .addHeader("Accept", "application/json")
                     .build();
 
-                HttpResponse<String> pollResponse = executeRequest(runContext, pollRequest);
-                int status = pollResponse.getStatus() != null ? pollResponse.getStatus().getCode() : 200;
+                var pollResponse = executeRequest(runContext, pollRequest);
+                var status = pollResponse.getStatus() != null ? pollResponse.getStatus().getCode() : 200;
 
                 if (status == 200) {
                     fetchedBody = pollResponse.getBody() != null ? pollResponse.getBody() : "{}";
@@ -259,13 +260,13 @@ public class Execute extends AbstractGooddata implements RunnableTask<Execute.Ou
                     break;
                 } else if (status == 202) {
                     logger.debug("AFM execution in progress (HTTP 202), attempt {}, waiting...", attempts);
-                    long remainingMs = maxDurationMs - (System.currentTimeMillis() - startTime);
+                    var remainingMs = maxDurationMs - (System.currentTimeMillis() - startTime);
                     if (remainingMs <= 0) {
                         break;
                     }
                     Thread.sleep(Math.min(pollIntervalMs, remainingMs));
                 } else {
-                    String bodyExcerpt = pollResponse.getBody() != null
+                    var bodyExcerpt = pollResponse.getBody() != null
                         ? (pollResponse.getBody().length() > 500 ? pollResponse.getBody().substring(0, 500) + "..." : pollResponse.getBody())
                         : "";
                     throw new GooddataApiException(
@@ -278,7 +279,7 @@ public class Execute extends AbstractGooddata implements RunnableTask<Execute.Ou
 
             if (fetchedBody == null) {
                 throw new TimeoutException("AFM execution did not complete within timeout of "
-                    + renderedMaxPollDuration.toMillis() + "ms for resultId: " + executionResultId);
+                    + rMaxPollDuration.toMillis() + "ms for resultId: " + executionResultId);
             }
             resultJson = fetchedBody;
         } else {
@@ -286,8 +287,8 @@ public class Execute extends AbstractGooddata implements RunnableTask<Execute.Ou
             resultJson = executeJson;
         }
 
-        JsonNode resultRoot = MAPPER.readTree(resultJson);
-        JsonNode dataNode = resultRoot.path("data");
+        var resultRoot = MAPPER.readTree(resultJson);
+        var dataNode = resultRoot.path("data");
         if (dataNode.isMissingNode() && resultRoot.has("executionResult")) {
             dataNode = resultRoot.path("executionResult").path("data");
         }
@@ -301,9 +302,9 @@ public class Execute extends AbstractGooddata implements RunnableTask<Execute.Ou
 
         if (dataNode.isArray()) {
             size = dataNode.size();
-            if (renderedFetchType == FetchType.FETCH) {
+            if (rFetchType == FetchType.FETCH) {
                 rows = MAPPER.convertValue(dataNode, new TypeReference<List<Object>>() {});
-            } else if (renderedFetchType == FetchType.FETCH_ONE) {
+            } else if (rFetchType == FetchType.FETCH_ONE) {
                 if (dataNode.size() > 0) {
                     singleRow = MAPPER.convertValue(dataNode.get(0), Object.class);
                 }
@@ -313,7 +314,7 @@ public class Execute extends AbstractGooddata implements RunnableTask<Execute.Ou
         }
 
         URI storageUri = null;
-        if (renderedFetchType == FetchType.STORE) {
+        if (rFetchType == FetchType.STORE) {
             storageUri = runContext.storage().putFile(
                 new ByteArrayInputStream(resultJson.getBytes(StandardCharsets.UTF_8)),
                 "execution_result.json"
