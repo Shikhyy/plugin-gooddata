@@ -676,4 +676,47 @@ public class GooddataTasksTest {
         assertThat(output.getExecutionResultId(), is("res-slash"));
         assertThat(output.getSize(), is(1));
     }
+
+    @Test
+    void testExecuteAfmWithDotDotResultIdThrows() {
+        wireMockServer.stubFor(post(urlEqualTo("/api/v1/actions/workspaces/sales-workspace/execution/afm/execute"))
+            .willReturn(aResponse()
+                .withStatus(200)
+                .withHeader("Content-Type", "application/json")
+                .withBody("{\"executionResponse\": {\"links\": {\"executionResult\": \"/api/v1/actions/workspaces/sales-workspace/execution/afm/execute/result/..\"}}}")));
+
+        Execute execute = Execute.builder()
+            .id("exec-dotdot-test")
+            .url(Property.ofValue(serverUrl))
+            .apiToken(Property.ofValue("test-token"))
+            .workspaceId(Property.ofValue("sales-workspace"))
+            .afmRequest(Property.ofValue("{\"execution\": {}}"))
+            .fetchType(Property.ofValue(FetchType.FETCH))
+            .build();
+
+        RunContext runContext = runContextFactory.of();
+        IllegalArgumentException ex = assertThrows(IllegalArgumentException.class, () -> execute.run(runContext));
+        assertThat(ex.getMessage(), containsString("Invalid GoodData executionResult identifier"));
+    }
+
+    @Test
+    void testListWorkspacesCircularPaginationHalts() throws Exception {
+        wireMockServer.stubFor(get(urlEqualTo("/api/v1/entities/workspaces"))
+            .withHeader("Authorization", equalTo("Bearer test-token"))
+            .willReturn(aResponse()
+                .withStatus(200)
+                .withHeader("Content-Type", "application/json")
+                .withBody("{\"data\": [{\"id\": \"w1\"}], \"links\": {\"next\": \"/api/v1/entities/workspaces\"}}")));
+
+        List list = List.builder()
+            .id("list-circular-test")
+            .url(Property.ofValue(serverUrl))
+            .apiToken(Property.ofValue("test-token"))
+            .build();
+
+        RunContext runContext = runContextFactory.of();
+        List.Output output = list.run(runContext);
+
+        assertThat(output.getCount(), is(1));
+    }
 }
