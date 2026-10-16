@@ -69,7 +69,7 @@ Exports the full declarative workspace layout (Logical Data Model + analytics mo
 | `datasetCount` | `int` | Count of LDM datasets found in the exported layout |
 | `uri` | `URI` | Kestra internal file URI containing the raw JSON workspace layout |
 
-### `workspaces.List`
+### `workspaces.WorkspaceList`
 
 Lists all workspaces accessible to the API token via
 `GET /api/v1/entities/workspaces`. Follows pagination links when multiple pages exist.
@@ -125,7 +125,7 @@ tasks:
     workspaceId: "sales"
 
   - id: list_workspaces
-    type: io.kestra.plugin.gooddata.workspaces.List
+    type: io.kestra.plugin.gooddata.workspaces.WorkspaceList
     url: "https://acme.cloud.gooddata.com"
     apiToken: "{{ secret('GOODDATA_TOKEN') }}"
 ```

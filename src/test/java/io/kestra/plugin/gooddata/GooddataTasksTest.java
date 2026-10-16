@@ -16,7 +16,7 @@ import io.kestra.core.utils.IdUtils;
 import io.kestra.plugin.gooddata.dataSources.Scan;
 import io.kestra.plugin.gooddata.executions.Execute;
 import io.kestra.plugin.gooddata.layouts.Export;
-import io.kestra.plugin.gooddata.workspaces.List;
+import io.kestra.plugin.gooddata.workspaces.WorkspaceList;
 import io.kestra.plugin.gooddata.workspaces.Trigger;
 import jakarta.inject.Inject;
 import org.junit.jupiter.api.AfterEach;
@@ -101,7 +101,7 @@ public class GooddataTasksTest {
 
     @Test
     void listWorkspacesTaskBuilder() {
-        List list = List.builder()
+        WorkspaceList list = WorkspaceList.builder()
             .id("list-test")
             .url(Property.ofValue("https://acme.cloud.gooddata.com"))
             .apiToken(Property.ofValue("secret-token"))
@@ -223,14 +223,14 @@ public class GooddataTasksTest {
                 .withHeader("Content-Type", "application/json")
                 .withBody("{\"data\": [{\"id\": \"w1\"}, {\"id\": \"w2\"}]}")));
 
-        List list = List.builder()
+        WorkspaceList list = WorkspaceList.builder()
             .id("list-test")
             .url(Property.ofValue(serverUrl))
             .apiToken(Property.ofValue("test-token"))
             .build();
 
         RunContext runContext = runContextFactory.of();
-        List.Output output = list.run(runContext);
+        WorkspaceList.Output output = list.run(runContext);
 
         assertThat(output.getCount(), is(2));
         assertThat(output.getUri(), notNullValue());
@@ -422,7 +422,7 @@ public class GooddataTasksTest {
 
         RunContext runContext = runContextFactory.of();
         SecurityException exception = assertThrows(SecurityException.class, () -> execute.run(runContext));
-        assertThat(exception.getMessage(), containsString("Untrusted executionResult host in GoodData response"));
+        assertThat(exception.getMessage(), containsString("Untrusted URI in GoodData response"));
     }
 
     @Test
@@ -602,14 +602,14 @@ public class GooddataTasksTest {
                 .withHeader("Content-Type", "application/json")
                 .withBody("{\"data\": [{\"id\": \"w2\"}, {\"id\": \"w3\"}], \"links\": {}}")));
 
-        List list = List.builder()
+        WorkspaceList list = WorkspaceList.builder()
             .id("list-pagination-test")
             .url(Property.ofValue(serverUrl))
             .apiToken(Property.ofValue("test-token"))
             .build();
 
         RunContext runContext = runContextFactory.of();
-        List.Output output = list.run(runContext);
+        WorkspaceList.Output output = list.run(runContext);
 
         assertThat(output.getCount(), is(3));
         assertThat(output.getUri(), notNullValue());
@@ -625,7 +625,7 @@ public class GooddataTasksTest {
                 .withHeader("Content-Type", "application/json")
                 .withBody("{\"data\": [{\"id\": \"w1\"}], \"links\": {\"next\": \"https://evil.example.com/api/v1/entities/workspaces\"}}")));
 
-        List list = List.builder()
+        WorkspaceList list = WorkspaceList.builder()
             .id("list-ssrf-test")
             .url(Property.ofValue(serverUrl))
             .apiToken(Property.ofValue("test-token"))
@@ -633,7 +633,7 @@ public class GooddataTasksTest {
 
         RunContext runContext = runContextFactory.of();
         SecurityException ex = assertThrows(SecurityException.class, () -> list.run(runContext));
-        assertThat(ex.getMessage(), containsString("Untrusted next page host"));
+        assertThat(ex.getMessage(), containsString("Untrusted URI in GoodData response"));
     }
 
     @Test
@@ -709,14 +709,14 @@ public class GooddataTasksTest {
                 .withHeader("Content-Type", "application/json")
                 .withBody("{\"data\": [{\"id\": \"w1\"}], \"links\": {\"next\": \"/api/v1/entities/workspaces\"}}")));
 
-        List list = List.builder()
+        WorkspaceList list = WorkspaceList.builder()
             .id("list-circular-test")
             .url(Property.ofValue(serverUrl))
             .apiToken(Property.ofValue("test-token"))
             .build();
 
         RunContext runContext = runContextFactory.of();
-        List.Output output = list.run(runContext);
+        WorkspaceList.Output output = list.run(runContext);
 
         assertThat(output.getCount(), is(1));
         assertThat(output.getTruncated(), is(false));
@@ -738,7 +738,7 @@ public class GooddataTasksTest {
                 .withHeader("Content-Type", "application/json")
                 .withBody("{\"data\": [{\"id\": \"w2\"}], \"links\": {\"next\": \"/api/v1/entities/workspaces?page=2\"}}")));
 
-        List list = List.builder()
+        WorkspaceList list = WorkspaceList.builder()
             .id("list-truncation-test")
             .url(Property.ofValue(serverUrl))
             .apiToken(Property.ofValue("test-token"))
@@ -746,7 +746,7 @@ public class GooddataTasksTest {
             .build();
 
         RunContext runContext = runContextFactory.of();
-        List.Output output = list.run(runContext);
+        WorkspaceList.Output output = list.run(runContext);
 
         assertThat(output.getCount(), is(1));
         assertThat(output.getTruncated(), is(true));
@@ -754,7 +754,7 @@ public class GooddataTasksTest {
 
     @Test
     void testListWorkspacesMaxPagesZeroThrows() {
-        List list = List.builder()
+        WorkspaceList list = WorkspaceList.builder()
             .id("list-invalid-max-pages")
             .url(Property.ofValue(serverUrl))
             .apiToken(Property.ofValue("test-token"))
