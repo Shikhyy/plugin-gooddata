@@ -72,7 +72,12 @@ Exports the full declarative workspace layout (Logical Data Model + analytics mo
 ### `workspaces.List`
 
 Lists all workspaces accessible to the API token via
-`GET /api/v1/entities/workspaces`.
+`GET /api/v1/entities/workspaces`. Follows pagination links when multiple pages exist.
+
+**Configuration Options**
+
+- `maxPages`: Maximum number of pagination pages to fetch (default: `50`).
+- `requestTimeout`: Optional HTTP request timeout duration for individual API calls (default: `PT60S`).
 
 **Outputs**
 

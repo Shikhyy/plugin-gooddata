@@ -8,6 +8,8 @@ import io.kestra.core.http.HttpRequest;
 import io.kestra.core.http.HttpResponse;
 import io.kestra.core.models.annotations.Example;
 import io.kestra.core.models.annotations.Plugin;
+import io.kestra.core.models.annotations.PluginProperty;
+import io.kestra.core.models.property.Property;
 import io.kestra.core.models.tasks.RunnableTask;
 import io.kestra.core.runners.RunContext;
 import io.kestra.plugin.gooddata.AbstractGooddata;
@@ -19,6 +21,8 @@ import org.slf4j.Logger;
 import java.io.ByteArrayInputStream;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
+import java.util.HashSet;
+import java.util.Set;
 
 /**
  * Kestra task that lists all GoodData workspaces accessible by the API token.
@@ -60,6 +64,14 @@ public class List extends AbstractGooddata implements RunnableTask<List.Output> 
 
     private static final ObjectMapper MAPPER = new ObjectMapper();
 
+    @Schema(
+        title = "Maximum pages",
+        description = "Maximum number of pagination pages to fetch. Defaults to 50."
+    )
+    @Builder.Default
+    @PluginProperty(group = "processing")
+    private Property<Integer> maxPages = Property.ofValue(50);
+
     @Override
     public Output run(RunContext runContext) throws Exception {
         Logger logger = runContext.logger();
@@ -74,9 +86,14 @@ public class List extends AbstractGooddata implements RunnableTask<List.Output> 
         ArrayNode allWorkspaces = MAPPER.createArrayNode();
         String firstPageJson = null;
         int pageCount = 0;
-        final int maxPages = 1000;
+        int renderedMaxPages = this.maxPages != null
+            ? runContext.render(this.maxPages).as(Integer.class).orElse(50)
+            : 50;
 
-        while (currentUrl != null && !currentUrl.isBlank() && pageCount < maxPages) {
+        Set<String> visitedUrls = new HashSet<>();
+        visitedUrls.add(currentUrl);
+
+        while (currentUrl != null && !currentUrl.isBlank() && pageCount < renderedMaxPages) {
             pageCount++;
             HttpRequest request = HttpRequest.builder()
                 .uri(URI.create(currentUrl))
@@ -101,6 +118,7 @@ public class List extends AbstractGooddata implements RunnableTask<List.Output> 
 
             String nextLink = pageRoot.path("links").path("next").asText("");
             if (!nextLink.isBlank()) {
+                String resolvedNextUrl;
                 if (nextLink.startsWith("http://") || nextLink.startsWith("https://")) {
                     URI nextUri = URI.create(nextLink);
                     URI baseUri = URI.create(baseUrl);
@@ -115,11 +133,19 @@ public class List extends AbstractGooddata implements RunnableTask<List.Output> 
                         throw new SecurityException("Untrusted next page host in GoodData response: '"
                             + nextUri + "' does not match configured base URL '" + baseUrl + "'");
                     }
-                    currentUrl = nextLink;
+                    resolvedNextUrl = nextLink;
                 } else {
-                    currentUrl = baseUrl + (nextLink.startsWith("/") ? nextLink : "/" + nextLink);
+                    resolvedNextUrl = baseUrl + (nextLink.startsWith("/") ? nextLink : "/" + nextLink);
                 }
-                logger.debug("Fetching next page of workspaces from: {}", currentUrl);
+
+                if (visitedUrls.contains(resolvedNextUrl)) {
+                    logger.warn("Detected circular pagination loop in GoodData workspaces. Next URL '{}' already visited. Halting pagination.", resolvedNextUrl);
+                    currentUrl = null;
+                } else {
+                    visitedUrls.add(resolvedNextUrl);
+                    currentUrl = resolvedNextUrl;
+                    logger.debug("Fetching next page of workspaces from: {}", currentUrl);
+                }
             } else {
                 currentUrl = null;
             }
