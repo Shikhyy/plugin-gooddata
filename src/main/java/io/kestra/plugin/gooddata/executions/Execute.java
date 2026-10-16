@@ -184,13 +184,20 @@ public class Execute extends AbstractGooddata implements RunnableTask<Execute.Ou
         if (executionResultLink.isBlank()) {
             executionResultLink = executeRoot.path("links").path("executionResult").asText("");
         }
+        if (executionResultLink.isBlank()) {
+            executionResultLink = executeRoot.path("executionResponse").path("executionResult").asText("");
+        }
+        if (executionResultLink.isBlank()) {
+            executionResultLink = executeRoot.path("executionResult").asText("");
+        }
 
         String executionResultId = "";
         String resultJson;
 
         if (!executionResultLink.isBlank()) {
-            if (executionResultLink.startsWith("http://") || executionResultLink.startsWith("https://")) {
-                URI resultUri = URI.create(executionResultLink);
+            String trimmedLink = executionResultLink.trim().replaceAll("/+$", "");
+            if (trimmedLink.startsWith("http://") || trimmedLink.startsWith("https://")) {
+                URI resultUri = URI.create(trimmedLink);
                 URI baseUri = URI.create(baseUrl);
                 int basePort = baseUri.getPort() != -1 ? baseUri.getPort() : ("https".equalsIgnoreCase(baseUri.getScheme()) ? 443 : 80);
                 int resultPort = resultUri.getPort() != -1 ? resultUri.getPort() : ("https".equalsIgnoreCase(resultUri.getScheme()) ? 443 : 80);
@@ -205,8 +212,8 @@ public class Execute extends AbstractGooddata implements RunnableTask<Execute.Ou
                 }
             }
 
-            int lastSlash = executionResultLink.lastIndexOf('/');
-            String rawId = lastSlash != -1 ? executionResultLink.substring(lastSlash + 1) : executionResultLink;
+            int lastSlash = trimmedLink.lastIndexOf('/');
+            String rawId = lastSlash != -1 ? trimmedLink.substring(lastSlash + 1) : trimmedLink;
             String query = "";
             if (rawId.contains("?")) {
                 query = rawId.substring(rawId.indexOf('?'));
@@ -215,6 +222,9 @@ public class Execute extends AbstractGooddata implements RunnableTask<Execute.Ou
             if (rawId.contains("#")) {
                 rawId = rawId.substring(0, rawId.indexOf('#'));
             }
+            try {
+                rawId = java.net.URLDecoder.decode(rawId, StandardCharsets.UTF_8);
+            } catch (Exception ignored) {}
             executionResultId = rawId;
             logger.info("AFM execution started, result ID: {}", executionResultId);
 
@@ -276,6 +286,9 @@ public class Execute extends AbstractGooddata implements RunnableTask<Execute.Ou
         JsonNode dataNode = resultRoot.path("data");
         if (dataNode.isMissingNode() && resultRoot.has("executionResult")) {
             dataNode = resultRoot.path("executionResult").path("data");
+        }
+        if ((dataNode.isMissingNode() || dataNode.isNull()) && resultRoot.has("result")) {
+            dataNode = resultRoot.path("result").path("data");
         }
 
         List<Object> rows = null;

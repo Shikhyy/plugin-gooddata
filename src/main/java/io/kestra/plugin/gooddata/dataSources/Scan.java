@@ -107,6 +107,9 @@ public class Scan extends AbstractGooddata implements RunnableTask<Scan.Output> 
             tablesFound = root.path("pdm").path("datasets").size();
             if (tablesFound == 0) {
                 tablesFound = root.path("tables").size();
+                if (tablesFound == 0 && root.has("data") && root.path("data").isArray()) {
+                    tablesFound = root.path("data").size();
+                }
             }
         }
         logger.info("Data source scan found {} tables", tablesFound);

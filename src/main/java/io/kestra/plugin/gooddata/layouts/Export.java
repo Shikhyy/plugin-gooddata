@@ -99,6 +99,9 @@ public class Export extends AbstractGooddata implements RunnableTask<Export.Outp
         if (datasetCount == 0) {
             // Fallback: workspaceLayout.ldm.datasets
             datasetCount = root.path("workspaceLayout").path("ldm").path("datasets").size();
+            if (datasetCount == 0 && root.has("datasets") && root.path("datasets").isArray()) {
+                datasetCount = root.path("datasets").size();
+            }
         }
         logger.info("Workspace layout contains {} datasets", datasetCount);
 
