@@ -16,6 +16,7 @@ import io.kestra.core.models.triggers.TriggerContext;
 import io.kestra.core.models.triggers.TriggerOutput;
 import io.kestra.core.models.triggers.TriggerService;
 import io.kestra.core.runners.RunContext;
+import io.kestra.core.serializers.JacksonMapper;
 import io.kestra.core.storages.kv.KVStore;
 import io.kestra.core.storages.kv.KVValue;
 import io.kestra.core.storages.kv.KVValueAndMetadata;
@@ -33,6 +34,7 @@ import java.security.MessageDigest;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.HexFormat;
 import java.util.List;
 import java.util.Optional;
@@ -130,70 +132,145 @@ public class Trigger extends AbstractTrigger implements PollingTriggerInterface,
         return interval;
     }
 
-    private static final ObjectMapper MAPPER = new ObjectMapper();
+    private static final ObjectMapper MAPPER = JacksonMapper.ofJson();
 
     @Override
     public Optional<Execution> evaluate(ConditionContext conditionContext, TriggerContext triggerContext) throws Exception {
-        RunContext runContext = conditionContext.getRunContext();
-        Logger logger = runContext.logger();
+        var runContext = conditionContext.getRunContext();
+        var logger = runContext.logger();
 
-        String rawUrl = runContext.render(url).as(String.class).orElseThrow(
+        var rawUrl = runContext.render(url).as(String.class).orElseThrow(
             () -> new IllegalArgumentException("'url' must be provided"));
-        String baseUrl = AbstractGooddata.validateAndNormalizeUrl(rawUrl);
-        String renderedToken = runContext.render(apiToken).as(String.class).orElseThrow(
+        var rUrl = AbstractGooddata.validateAndNormalizeUrl(rawUrl);
+        var rToken = runContext.render(apiToken).as(String.class).orElseThrow(
             () -> new IllegalArgumentException("'apiToken' must be provided"));
-        String renderedWsId = workspaceId != null ? runContext.render(workspaceId).as(String.class).orElse(null) : null;
+        var rWsId = workspaceId != null ? runContext.render(workspaceId).as(String.class).orElse(null) : null;
 
-        Duration renderedRequestTimeout = requestTimeout != null
+        var rRequestTimeout = requestTimeout != null
             ? runContext.render(requestTimeout).as(Duration.class).orElse(Duration.ofSeconds(60))
             : Duration.ofSeconds(60);
 
-        boolean renderedOnStartup = onStartup != null
+        var rOnStartup = onStartup != null
             ? runContext.render(onStartup).as(Boolean.class).orElse(false)
             : false;
 
-        String endpoint;
+        String rawJson;
         String targetSuffix;
-        if (renderedWsId != null && !renderedWsId.isBlank()) {
-            String encodedWsId = AbstractGooddata.encodePath(renderedWsId);
-            endpoint = baseUrl + "/api/v1/layout/workspaces/" + encodedWsId;
+
+        if (rWsId != null && !rWsId.isBlank()) {
+            var encodedWsId = AbstractGooddata.encodePath(rWsId);
+            var endpoint = rUrl + "/api/v1/layout/workspaces/" + encodedWsId;
             targetSuffix = encodedWsId;
+
+            logger.debug("Checking GoodData change at endpoint: {}", endpoint);
+
+            var request = HttpRequest.builder()
+                .uri(URI.create(endpoint))
+                .method("GET")
+                .addHeader("Authorization", "Bearer " + rToken)
+                .addHeader("Accept", "application/json")
+                .build();
+
+            var response = AbstractGooddata.execute(runContext, request, rRequestTimeout);
+            rawJson = response.getBody() != null ? response.getBody() : "{}";
         } else {
-            endpoint = baseUrl + "/api/v1/entities/workspaces";
             targetSuffix = "entities";
+            var currentUrl = rUrl + "/api/v1/entities/workspaces";
+            logger.debug("Checking GoodData change for workspace list at: {}", currentUrl);
+
+            var allWorkspaces = MAPPER.createArrayNode();
+            String firstPageJson = null;
+            var pageCount = 0;
+            final var maxPages = 50;
+
+            var visitedUrls = new HashSet<String>();
+            visitedUrls.add(currentUrl);
+
+            while (currentUrl != null && !currentUrl.isBlank() && pageCount < maxPages) {
+                pageCount++;
+                var request = HttpRequest.builder()
+                    .uri(URI.create(currentUrl))
+                    .method("GET")
+                    .addHeader("Authorization", "Bearer " + rToken)
+                    .addHeader("Accept", "application/json")
+                    .build();
+
+                var response = AbstractGooddata.execute(runContext, request, rRequestTimeout);
+                var pageJson = response.getBody() != null ? response.getBody() : "{}";
+                if (firstPageJson == null) {
+                    firstPageJson = pageJson;
+                }
+
+                var pageRoot = MAPPER.readTree(pageJson);
+                var dataNode = pageRoot.path("data");
+                if (dataNode.isArray()) {
+                    for (var item : dataNode) {
+                        allWorkspaces.add(item);
+                    }
+                }
+
+                var nextLink = pageRoot.path("links").path("next").asText("");
+                if (!nextLink.isBlank()) {
+                    String resolvedNextUrl;
+                    if (nextLink.startsWith("http://") || nextLink.startsWith("https://")) {
+                        var nextUri = URI.create(nextLink);
+                        var baseUri = URI.create(rUrl);
+                        var basePort = baseUri.getPort() != -1 ? baseUri.getPort() : ("https".equalsIgnoreCase(baseUri.getScheme()) ? 443 : 80);
+                        var nextPort = nextUri.getPort() != -1 ? nextUri.getPort() : ("https".equalsIgnoreCase(nextUri.getScheme()) ? 443 : 80);
+
+                        if (nextUri.getHost() == null
+                            || !nextUri.getHost().equalsIgnoreCase(baseUri.getHost())
+                            || nextUri.getScheme() == null
+                            || !nextUri.getScheme().equalsIgnoreCase(baseUri.getScheme())
+                            || basePort != nextPort) {
+                            throw new SecurityException("Untrusted next page host in GoodData response: '"
+                                + nextUri + "' does not match configured base URL '" + rUrl + "'");
+                        }
+                        resolvedNextUrl = nextLink;
+                    } else {
+                        resolvedNextUrl = rUrl + (nextLink.startsWith("/") ? nextLink : "/" + nextLink);
+                    }
+
+                    if (visitedUrls.contains(resolvedNextUrl)) {
+                        logger.warn("Detected circular pagination loop in GoodData workspace trigger. Next URL '{}' already visited. Halting pagination.", resolvedNextUrl);
+                        currentUrl = null;
+                    } else {
+                        visitedUrls.add(resolvedNextUrl);
+                        currentUrl = resolvedNextUrl;
+                    }
+                } else {
+                    currentUrl = null;
+                }
+            }
+
+            if (pageCount <= 1) {
+                rawJson = firstPageJson != null ? firstPageJson : "{}";
+            } else {
+                var consolidated = MAPPER.createObjectNode();
+                consolidated.set("data", allWorkspaces);
+                rawJson = MAPPER.writeValueAsString(consolidated);
+            }
         }
 
-        logger.debug("Checking GoodData change at endpoint: {}", endpoint);
-
-        HttpRequest request = HttpRequest.builder()
-            .uri(URI.create(endpoint))
-            .method("GET")
-            .addHeader("Authorization", "Bearer " + renderedToken)
-            .addHeader("Accept", "application/json")
-            .build();
-
-        HttpResponse<String> response = AbstractGooddata.execute(runContext, request, renderedRequestTimeout);
-        String rawJson = response.getBody() != null ? response.getBody() : "{}";
-
         // Calculate watermark fingerprint via canonicalized SHA-256 (stable across key ordering and whitespace)
-        String canonicalJson = canonicalizeJson(rawJson);
-        MessageDigest digest = MessageDigest.getInstance("SHA-256");
-        byte[] hash = digest.digest(canonicalJson.getBytes(StandardCharsets.UTF_8));
-        String currentWatermark = HexFormat.of().formatHex(hash);
+        var canonicalJson = canonicalizeJson(rawJson);
+        var digest = MessageDigest.getInstance("SHA-256");
+        var hash = digest.digest(canonicalJson.getBytes(StandardCharsets.UTF_8));
+        var currentWatermark = HexFormat.of().formatHex(hash);
 
         // Watermark KV key scoped per flow and trigger to prevent missed/duplicated events across flows
-        String namespace = triggerContext.getNamespace();
-        String flowId = triggerContext.getFlowId() != null ? triggerContext.getFlowId() : "default";
-        String triggerId = triggerContext.getTriggerId() != null ? triggerContext.getTriggerId() : "default";
-        String kvKey = "gooddata_watermark_" + flowId.length() + "_" + flowId + "_" + triggerId + "_" + targetSuffix;
+        var namespace = triggerContext.getNamespace();
+        var flowId = triggerContext.getFlowId() != null ? triggerContext.getFlowId() : "default";
+        var triggerId = triggerContext.getTriggerId() != null ? triggerContext.getTriggerId() : "default";
+        var kvKey = "gooddata_watermark_" + flowId.length() + "_" + flowId + "_" + triggerId + "_" + targetSuffix;
 
-        KVStore kvStore = runContext.namespaceKv(namespace);
-        Optional<KVValue> previousValue = kvStore.getValue(kvKey);
+        var kvStore = runContext.namespaceKv(namespace);
+        var previousValue = kvStore.getValue(kvKey);
 
         if (previousValue.isEmpty()) {
             // First poll: seed watermark
             kvStore.put(kvKey, new KVValueAndMetadata(null, currentWatermark));
-            if (!renderedOnStartup) {
+            if (!rOnStartup) {
                 logger.info("Initialized GoodData watermark for {} to {}. Skipping initial execution.", kvKey, currentWatermark);
                 return Optional.empty();
             }
@@ -206,20 +283,20 @@ public class Trigger extends AbstractTrigger implements PollingTriggerInterface,
             kvStore.put(kvKey, new KVValueAndMetadata(null, currentWatermark));
         }
 
-        URI storageUri = runContext.storage() != null
+        var storageUri = runContext.storage() != null
             ? runContext.storage().putFile(
                 new ByteArrayInputStream(rawJson.getBytes(StandardCharsets.UTF_8)),
                 "trigger_" + targetSuffix + ".json"
             )
             : null;
 
-        Output output = Output.builder()
+        var output = Output.builder()
             .watermark(currentWatermark)
-            .workspaceId(renderedWsId)
+            .workspaceId(rWsId)
             .uri(storageUri)
             .build();
 
-        Execution execution = TriggerService.generateExecution(this, conditionContext, triggerContext, output);
+        var execution = TriggerService.generateExecution(this, conditionContext, triggerContext, output);
         return Optional.of(execution);
     }
 

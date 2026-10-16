@@ -76,7 +76,7 @@ Lists all workspaces accessible to the API token via
 
 **Configuration Options**
 
-- `maxPages`: Maximum number of pagination pages to fetch (default: `50`).
+- `maxPages`: Maximum number of pagination pages to fetch (minimum `1`, default: `50`).
 - `requestTimeout`: Optional HTTP request timeout duration for individual API calls (default: `PT60S`).
 
 **Outputs**
@@ -85,6 +85,7 @@ Lists all workspaces accessible to the API token via
 |---|---|---|
 | `count` | `int` | Number of workspaces returned |
 | `uri` | `URI` | Kestra internal file URI containing the raw JSON workspaces list |
+| `truncated` | `Boolean` | Whether results were truncated because maxPages was reached |
 
 ### `workspaces.Trigger`
 
