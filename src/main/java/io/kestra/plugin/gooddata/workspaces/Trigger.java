@@ -109,12 +109,12 @@ public class Trigger extends AbstractTrigger implements PollingTriggerInterface,
     private Property<String> workspaceId;
 
     @Schema(
-        title = "HTTP timeout",
+        title = "HTTP request timeout",
         description = "Timeout duration for polling HTTP requests."
     )
     @Builder.Default
     @PluginProperty(group = "connection")
-    private Property<Duration> timeout = Property.of(Duration.ofSeconds(60));
+    private Property<Duration> requestTimeout = Property.ofValue(Duration.ofSeconds(60));
 
     @Schema(
         title = "On startup trigger",
@@ -122,7 +122,7 @@ public class Trigger extends AbstractTrigger implements PollingTriggerInterface,
     )
     @Builder.Default
     @PluginProperty(group = "processing")
-    private Property<Boolean> onStartup = Property.of(false);
+    private Property<Boolean> onStartup = Property.ofValue(false);
 
     @Override
     public Duration getInterval() {
@@ -143,8 +143,8 @@ public class Trigger extends AbstractTrigger implements PollingTriggerInterface,
             () -> new IllegalArgumentException("'apiToken' must be provided"));
         String renderedWsId = workspaceId != null ? runContext.render(workspaceId).as(String.class).orElse(null) : null;
 
-        Duration renderedTimeout = timeout != null
-            ? runContext.render(timeout).as(Duration.class).orElse(Duration.ofSeconds(60))
+        Duration renderedRequestTimeout = requestTimeout != null
+            ? runContext.render(requestTimeout).as(Duration.class).orElse(Duration.ofSeconds(60))
             : Duration.ofSeconds(60);
 
         boolean renderedOnStartup = onStartup != null
@@ -171,7 +171,7 @@ public class Trigger extends AbstractTrigger implements PollingTriggerInterface,
             .addHeader("Accept", "application/json")
             .build();
 
-        HttpResponse<String> response = AbstractGooddata.execute(runContext, request, renderedTimeout);
+        HttpResponse<String> response = AbstractGooddata.execute(runContext, request, renderedRequestTimeout);
         String rawJson = response.getBody() != null ? response.getBody() : "{}";
 
         // Calculate watermark fingerprint via canonicalized SHA-256 (stable across key ordering and whitespace)

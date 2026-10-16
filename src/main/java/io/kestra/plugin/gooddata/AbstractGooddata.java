@@ -48,12 +48,12 @@ public abstract class AbstractGooddata extends Task {
     protected Property<String> apiToken;
 
     @Schema(
-        title = "HTTP timeout",
-        description = "Timeout duration for HTTP requests to the GoodData API."
+        title = "HTTP request timeout",
+        description = "Timeout duration for individual HTTP requests to the GoodData API."
     )
     @Builder.Default
     @PluginProperty(group = "connection")
-    protected Property<Duration> timeout = Property.of(Duration.ofSeconds(60));
+    protected Property<Duration> requestTimeout = Property.ofValue(Duration.ofSeconds(60));
 
     public static String encodePath(String pathSegment) {
         if (pathSegment == null) {
@@ -83,14 +83,14 @@ public abstract class AbstractGooddata extends Task {
         HttpConfiguration config = HttpConfiguration.builder()
             .connectTimeout(effectiveTimeout)
             .readTimeout(effectiveTimeout)
-            .allowFailed(Property.of(true))
-            .followRedirects(Property.of(false))
+            .allowFailed(Property.ofValue(true))
+            .followRedirects(Property.ofValue(false))
             .build();
         return new HttpClient(runContext, config);
     }
 
     protected HttpResponse<String> executeRequest(RunContext runContext, HttpRequest request) throws Exception {
-        Duration renderedTimeout = this.timeout != null ? runContext.render(this.timeout).as(Duration.class).orElse(Duration.ofSeconds(60)) : Duration.ofSeconds(60);
+        Duration renderedTimeout = this.requestTimeout != null ? runContext.render(this.requestTimeout).as(Duration.class).orElse(Duration.ofSeconds(60)) : Duration.ofSeconds(60);
         return execute(runContext, request, renderedTimeout);
     }
 

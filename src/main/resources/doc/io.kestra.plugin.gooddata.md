@@ -14,7 +14,7 @@ url: "https://acme.cloud.gooddata.com"
 apiToken: "{{ secret('GOODDATA_TOKEN') }}"
 ```
 
-- **Timeout (`timeout`)**: Optional HTTP request timeout duration (e.g. `PT60S`).
+- **Request Timeout (`requestTimeout`)**: Optional HTTP request timeout duration (default: `PT60S`).
 
 ## Tasks and Triggers
 
@@ -44,7 +44,8 @@ Executes an AFM (Analytical Framework Model) query against a GoodData workspace 
   - `FETCH_ONE`: Returns the first data row in `row`.
   - `NONE`: Computes without storing or fetching row data.
 - `pollInterval`: Polling interval between status checks (default: `PT1S`).
-- `timeout`: Maximum duration to wait for calculation completion (default: `PT60S`).
+- `maxPollDuration`: Maximum duration to poll for AFM calculation completion (default: `PT60S`).
+- `requestTimeout`: Optional HTTP request timeout duration for individual API calls (default: `PT60S`).
 
 **Outputs**
 
