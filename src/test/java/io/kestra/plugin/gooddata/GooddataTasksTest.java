@@ -585,4 +585,95 @@ public class GooddataTasksTest {
         assertThat(output.getRows(), notNullValue());
         assertThat(output.getRows().size(), is(1));
     }
+
+    @Test
+    void testListWorkspacesPagination() throws Exception {
+        wireMockServer.stubFor(get(urlEqualTo("/api/v1/entities/workspaces"))
+            .withHeader("Authorization", equalTo("Bearer test-token"))
+            .willReturn(aResponse()
+                .withStatus(200)
+                .withHeader("Content-Type", "application/json")
+                .withBody("{\"data\": [{\"id\": \"w1\"}], \"links\": {\"next\": \"/api/v1/entities/workspaces?page=1\"}}")));
+
+        wireMockServer.stubFor(get(urlEqualTo("/api/v1/entities/workspaces?page=1"))
+            .withHeader("Authorization", equalTo("Bearer test-token"))
+            .willReturn(aResponse()
+                .withStatus(200)
+                .withHeader("Content-Type", "application/json")
+                .withBody("{\"data\": [{\"id\": \"w2\"}, {\"id\": \"w3\"}], \"links\": {}}")));
+
+        List list = List.builder()
+            .id("list-pagination-test")
+            .url(Property.ofValue(serverUrl))
+            .apiToken(Property.ofValue("test-token"))
+            .build();
+
+        RunContext runContext = runContextFactory.of();
+        List.Output output = list.run(runContext);
+
+        assertThat(output.getCount(), is(3));
+        assertThat(output.getUri(), notNullValue());
+    }
+
+    @Test
+    void testListWorkspacesForeignNextLinkRejected() {
+        wireMockServer.stubFor(get(urlEqualTo("/api/v1/entities/workspaces"))
+            .withHeader("Authorization", equalTo("Bearer test-token"))
+            .willReturn(aResponse()
+                .withStatus(200)
+                .withHeader("Content-Type", "application/json")
+                .withBody("{\"data\": [{\"id\": \"w1\"}], \"links\": {\"next\": \"https://evil.example.com/api/v1/entities/workspaces\"}}")));
+
+        List list = List.builder()
+            .id("list-ssrf-test")
+            .url(Property.ofValue(serverUrl))
+            .apiToken(Property.ofValue("test-token"))
+            .build();
+
+        RunContext runContext = runContextFactory.of();
+        SecurityException ex = assertThrows(SecurityException.class, () -> list.run(runContext));
+        assertThat(ex.getMessage(), containsString("Untrusted next page host"));
+    }
+
+    @Test
+    void testTriggerWatermarkIgnoresLinksAndVolatileTimestamps() {
+        String json1 = "{\"ldm\": {\"datasets\": [{\"id\": \"d1\"}]}, \"links\": {\"self\": \"https://host1/layout?page=0\"}, \"generatedAt\": \"2026-10-16T10:00:00Z\"}";
+        String json2 = "{\"links\": {\"self\": \"https://host2/layout?token=abc\"}, \"ldm\": {\"datasets\": [{\"id\": \"d1\"}]}, \"generatedAt\": \"2026-10-16T10:05:00Z\"}";
+
+        String canonical1 = Trigger.canonicalizeJson(json1);
+        String canonical2 = Trigger.canonicalizeJson(json2);
+
+        assertThat(canonical1, is(canonical2));
+        assertThat(canonical1, is("{\"ldm\":{\"datasets\":[{\"id\":\"d1\"}]}}"));
+    }
+
+    @Test
+    void testExecuteAfmWithTrailingSlashInResultLink() throws Exception {
+        wireMockServer.stubFor(post(urlEqualTo("/api/v1/actions/workspaces/sales-workspace/execution/afm/execute"))
+            .willReturn(aResponse()
+                .withStatus(200)
+                .withHeader("Content-Type", "application/json")
+                .withBody("{\"executionResponse\": {\"links\": {\"executionResult\": \"/api/v1/actions/workspaces/sales-workspace/execution/afm/execute/result/res-slash/\"}}}")));
+
+        wireMockServer.stubFor(get(urlEqualTo("/api/v1/actions/workspaces/sales-workspace/execution/afm/execute/result/res-slash"))
+            .willReturn(aResponse()
+                .withStatus(200)
+                .withHeader("Content-Type", "application/json")
+                .withBody("{\"data\": [[\"val_slash\"]]}")));
+
+        Execute execute = Execute.builder()
+            .id("exec-slash-test")
+            .url(Property.ofValue(serverUrl))
+            .apiToken(Property.ofValue("test-token"))
+            .workspaceId(Property.ofValue("sales-workspace"))
+            .afmRequest(Property.ofValue("{\"execution\": {}}"))
+            .fetchType(Property.ofValue(FetchType.FETCH))
+            .build();
+
+        RunContext runContext = runContextFactory.of();
+        Execute.Output output = execute.run(runContext);
+
+        assertThat(output.getExecutionResultId(), is("res-slash"));
+        assertThat(output.getSize(), is(1));
+    }
 }
