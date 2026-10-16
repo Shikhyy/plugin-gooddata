@@ -114,7 +114,7 @@ public class Execute extends AbstractGooddata implements RunnableTask<Execute.Ou
     )
     @Builder.Default
     @PluginProperty(group = "processing")
-    private Property<FetchType> fetchType = Property.of(FetchType.STORE);
+    private Property<FetchType> fetchType = Property.ofValue(FetchType.STORE);
 
     @Schema(
         title = "Poll interval",
@@ -122,7 +122,15 @@ public class Execute extends AbstractGooddata implements RunnableTask<Execute.Ou
     )
     @Builder.Default
     @PluginProperty(group = "processing")
-    private Property<Duration> pollInterval = Property.of(Duration.ofSeconds(1));
+    private Property<Duration> pollInterval = Property.ofValue(Duration.ofSeconds(1));
+
+    @Schema(
+        title = "Maximum polling duration",
+        description = "Maximum duration to poll for AFM execution completion before timing out."
+    )
+    @Builder.Default
+    @PluginProperty(group = "processing")
+    private Property<Duration> maxPollDuration = Property.ofValue(Duration.ofSeconds(60));
 
     @Override
     public Output run(RunContext runContext) throws Exception {
@@ -140,8 +148,8 @@ public class Execute extends AbstractGooddata implements RunnableTask<Execute.Ou
             ? runContext.render(this.fetchType).as(FetchType.class).orElse(FetchType.STORE)
             : FetchType.STORE;
 
-        Duration renderedTimeout = this.timeout != null
-            ? runContext.render(this.timeout).as(Duration.class).orElse(Duration.ofSeconds(60))
+        Duration renderedMaxPollDuration = this.maxPollDuration != null
+            ? runContext.render(this.maxPollDuration).as(Duration.class).orElse(Duration.ofSeconds(60))
             : Duration.ofSeconds(60);
 
         Duration renderedPollInterval = this.pollInterval != null
@@ -181,10 +189,27 @@ public class Execute extends AbstractGooddata implements RunnableTask<Execute.Ou
         String resultJson;
 
         if (!executionResultLink.isBlank()) {
+            if (executionResultLink.startsWith("http://") || executionResultLink.startsWith("https://")) {
+                URI resultUri = URI.create(executionResultLink);
+                URI baseUri = URI.create(baseUrl);
+                int basePort = baseUri.getPort() != -1 ? baseUri.getPort() : ("https".equalsIgnoreCase(baseUri.getScheme()) ? 443 : 80);
+                int resultPort = resultUri.getPort() != -1 ? resultUri.getPort() : ("https".equalsIgnoreCase(resultUri.getScheme()) ? 443 : 80);
+
+                if (resultUri.getHost() == null
+                    || !resultUri.getHost().equalsIgnoreCase(baseUri.getHost())
+                    || resultUri.getScheme() == null
+                    || !resultUri.getScheme().equalsIgnoreCase(baseUri.getScheme())
+                    || basePort != resultPort) {
+                    throw new SecurityException("Untrusted executionResult host in GoodData response: '"
+                        + resultUri + "' does not match configured base URL '" + baseUrl + "'");
+                }
+            }
+
             int lastSlash = executionResultLink.lastIndexOf('/');
-            // Raw ID is stored in the output; strip any query or fragment
             String rawId = lastSlash != -1 ? executionResultLink.substring(lastSlash + 1) : executionResultLink;
+            String query = "";
             if (rawId.contains("?")) {
+                query = rawId.substring(rawId.indexOf('?'));
                 rawId = rawId.substring(0, rawId.indexOf('?'));
             }
             if (rawId.contains("#")) {
@@ -193,30 +218,11 @@ public class Execute extends AbstractGooddata implements RunnableTask<Execute.Ou
             executionResultId = rawId;
             logger.info("AFM execution started, result ID: {}", executionResultId);
 
-            URI baseUri = URI.create(baseUrl);
-            URI resultUri = URI.create(executionResultLink);
-
-            String resultUrl;
-            if (resultUri.isAbsolute()) {
-                int basePort = baseUri.getPort() != -1 ? baseUri.getPort() : ("https".equalsIgnoreCase(baseUri.getScheme()) ? 443 : 80);
-                int resultPort = resultUri.getPort() != -1 ? resultUri.getPort() : ("https".equalsIgnoreCase(resultUri.getScheme()) ? 443 : 80);
-
-                if (!Objects.equals(resultUri.getHost(), baseUri.getHost())
-                    || !Objects.equals(resultUri.getScheme(), baseUri.getScheme())
-                    || basePort != resultPort) {
-                    throw new SecurityException("Untrusted executionResult host in GoodData response: '"
-                        + resultUri + "' does not match configured base URL '" + baseUrl + "'");
-                }
-                String rawPath = resultUri.getRawPath();
-                String rawQuery = resultUri.getRawQuery();
-                resultUrl = baseUrl + (rawPath.startsWith("/") ? rawPath : "/" + rawPath)
-                    + (rawQuery != null && !rawQuery.isBlank() ? "?" + rawQuery : "");
-            } else {
-                resultUrl = baseUrl + (executionResultLink.startsWith("/") ? executionResultLink : "/" + executionResultLink);
-            }
+            String resultUrl = baseUrl + "/api/v1/actions/workspaces/" + encodedWsId
+                + "/execution/afm/execute/result/" + encodePath(rawId) + query;
 
             long startTime = System.currentTimeMillis();
-            long maxDurationMs = renderedTimeout.toMillis();
+            long maxDurationMs = renderedMaxPollDuration.toMillis();
             long pollIntervalMs = Math.max(100, renderedPollInterval.toMillis());
             int attempts = 0;
             String fetchedBody = null;
@@ -258,7 +264,7 @@ public class Execute extends AbstractGooddata implements RunnableTask<Execute.Ou
 
             if (fetchedBody == null) {
                 throw new TimeoutException("AFM execution did not complete within timeout of "
-                    + renderedTimeout.toMillis() + "ms for resultId: " + executionResultId);
+                    + renderedMaxPollDuration.toMillis() + "ms for resultId: " + executionResultId);
             }
             resultJson = fetchedBody;
         } else {
