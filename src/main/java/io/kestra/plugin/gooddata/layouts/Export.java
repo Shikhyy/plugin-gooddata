@@ -95,6 +95,8 @@ public class Export extends AbstractGooddata implements RunnableTask<Export.Outp
         var rawJson = response.getBody() != null ? response.getBody() : "{}";
 
         // Count LDM datasets: response shape uses ldm.datasets
+        // Reference: GoodData Cloud API - GET /api/v1/layout/workspaces/{workspaceId}
+        // Fallback shapes: workspaceLayout.ldm.datasets, top-level datasets (for GoodData.CN compatibility)
         var root = MAPPER.readTree(rawJson);
         var datasetCount = root.path("ldm").path("datasets").size();
         if (datasetCount == 0) {

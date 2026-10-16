@@ -101,6 +101,8 @@ public class Scan extends AbstractGooddata implements RunnableTask<Scan.Output> 
         var rawJson = response.getBody() != null ? response.getBody() : "{}";
 
         // Count tables: response shape is {"pdm":{"tables":[...]}}
+        // Reference: GoodData Cloud API - POST /api/v1/actions/dataSources/{dataSourceId}/scan
+        // Fallback shapes: pdm.datasets, top-level tables, top-level data (for GoodData.CN compatibility)
         var root = MAPPER.readTree(rawJson);
         var tablesFound = root.path("pdm").path("tables").size();
         if (tablesFound == 0) {
