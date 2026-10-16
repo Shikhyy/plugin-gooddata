@@ -1,5 +1,9 @@
 package io.kestra.plugin.gooddata;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ArrayNode;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import io.kestra.core.exceptions.IllegalVariableEvaluationException;
 import io.kestra.core.http.HttpRequest;
 import io.kestra.core.http.HttpResponse;
@@ -10,14 +14,19 @@ import io.kestra.core.models.annotations.PluginProperty;
 import io.kestra.core.models.property.Property;
 import io.kestra.core.models.tasks.Task;
 import io.kestra.core.runners.RunContext;
+import io.kestra.core.serializers.JacksonMapper;
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotNull;
 import lombok.*;
 import lombok.experimental.SuperBuilder;
+import org.slf4j.Logger;
 
+import java.net.URI;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
+import java.util.HashSet;
+import java.util.Set;
 
 /**
  * Abstract base class for all GoodData tasks.
@@ -74,6 +83,143 @@ public abstract class AbstractGooddata extends Task {
         return trimmed.replaceAll("/+$", "");
     }
 
+    /**
+     * Asserts that a link URI has the same origin (scheme, host, and port) as the configured base URL.
+     * Throws SecurityException if the origins differ.
+     */
+    public static void assertSameOrigin(URI link, String baseUrl) {
+        var baseUri = URI.create(baseUrl);
+        var basePort = baseUri.getPort() != -1 ? baseUri.getPort() : ("https".equalsIgnoreCase(baseUri.getScheme()) ? 443 : 80);
+        var linkPort = link.getPort() != -1 ? link.getPort() : ("https".equalsIgnoreCase(link.getScheme()) ? 443 : 80);
+
+        if (link.getHost() == null
+            || !link.getHost().equalsIgnoreCase(baseUri.getHost())
+            || link.getScheme() == null
+            || !link.getScheme().equalsIgnoreCase(baseUri.getScheme())
+            || basePort != linkPort) {
+            throw new SecurityException("Untrusted URI in GoodData response: '"
+                + link + "' does not match configured base URL '" + baseUrl + "'");
+        }
+    }
+
+    /**
+     * Result object for workspace pagination containing the consolidated JSON and truncation status.
+     */
+    public static class WorkspacePagesResult {
+        private final String consolidatedJson;
+        private final boolean truncated;
+
+        public WorkspacePagesResult(String consolidatedJson, boolean truncated) {
+            this.consolidatedJson = consolidatedJson;
+            this.truncated = truncated;
+        }
+
+        public String getConsolidatedJson() {
+            return consolidatedJson;
+        }
+
+        public boolean isTruncated() {
+            return truncated;
+        }
+    }
+
+    /**
+     * Fetches all workspace pages from GoodData API following pagination links.
+     *
+     * @param runContext the Kestra run context
+     * @param baseUrl the configured GoodData base URL
+     * @param token the API token for authentication
+     * @param timeout the HTTP request timeout
+     * @param maxPages maximum number of pages to fetch
+     * @param logger the logger for debug/warn messages
+     * @return WorkspacePagesResult containing consolidated JSON and truncation flag
+     * @throws Exception if HTTP request fails or origin check fails
+     */
+    public static WorkspacePagesResult fetchWorkspacePages(
+        RunContext runContext,
+        String baseUrl,
+        String token,
+        Duration timeout,
+        int maxPages,
+        Logger logger
+    ) throws Exception {
+        var mapper = JacksonMapper.ofJson();
+        var currentUrl = baseUrl + "/api/v1/entities/workspaces";
+        var allWorkspaces = mapper.createArrayNode();
+        String firstPageJson = null;
+        var pageCount = 0;
+        var isTruncated = false;
+
+        var visitedUrls = new HashSet<String>();
+        visitedUrls.add(currentUrl);
+
+        while (currentUrl != null && !currentUrl.isBlank()) {
+            if (pageCount >= maxPages) {
+                isTruncated = true;
+                logger.warn("GoodData workspace list reached maximum page limit of {} with remaining pages available. "
+                    + "The results are truncated. Consider increasing 'maxPages'.", maxPages);
+                break;
+            }
+
+            pageCount++;
+            var request = HttpRequest.builder()
+                .uri(URI.create(currentUrl))
+                .method("GET")
+                .addHeader("Authorization", "Bearer " + token)
+                .addHeader("Accept", "application/json")
+                .build();
+
+            var response = execute(runContext, request, timeout);
+            var pageJson = response.getBody() != null ? response.getBody() : "{}";
+            if (firstPageJson == null) {
+                firstPageJson = pageJson;
+            }
+
+            var pageRoot = mapper.readTree(pageJson);
+            var dataNode = pageRoot.path("data");
+            if (dataNode.isArray()) {
+                for (var item : dataNode) {
+                    allWorkspaces.add(item);
+                }
+            }
+
+            var nextLink = pageRoot.path("links").path("next").asText("");
+            if (!nextLink.isBlank()) {
+                String resolvedNextUrl;
+                if (nextLink.startsWith("http://") || nextLink.startsWith("https://")) {
+                    var nextUri = URI.create(nextLink);
+                    assertSameOrigin(nextUri, baseUrl);
+                    resolvedNextUrl = nextLink;
+                } else {
+                    resolvedNextUrl = baseUrl + (nextLink.startsWith("/") ? nextLink : "/" + nextLink);
+                }
+
+                if (visitedUrls.contains(resolvedNextUrl)) {
+                    logger.warn("Detected circular pagination loop in GoodData workspaces. Next URL '{}' already visited. Halting pagination.", resolvedNextUrl);
+                    currentUrl = null;
+                } else {
+                    visitedUrls.add(resolvedNextUrl);
+                    currentUrl = resolvedNextUrl;
+                    logger.debug("Fetching next page of workspaces from: {}", currentUrl);
+                }
+            } else {
+                currentUrl = null;
+            }
+        }
+
+        String consolidatedJson;
+        if (pageCount <= 1) {
+            consolidatedJson = firstPageJson != null ? firstPageJson : "{}";
+        } else {
+            var consolidated = mapper.createObjectNode();
+            consolidated.set("data", allWorkspaces);
+            consolidatedJson = mapper.writeValueAsString(consolidated);
+        }
+
+        logger.info("Found {} workspaces across {} page(s)", allWorkspaces.size(), pageCount);
+        return new WorkspacePagesResult(consolidatedJson, isTruncated);
+    }
+
     protected String getRenderedApiToken(RunContext runContext) throws IllegalVariableEvaluationException {
         var rToken = runContext.render(this.apiToken).as(String.class).orElseThrow(
             () -> new IllegalArgumentException("'apiToken' must be provided"));
@@ -126,6 +272,17 @@ public abstract class AbstractGooddata extends Task {
                     excerpt
                 );
             }
+
+            // Warn on large responses (KPS-08: response bodies read into memory)
+            var responseBody = response.getBody();
+            if (responseBody != null && responseBody.length() > 10_000_000) {
+                runContext.logger().warn(
+                    "GoodData API response body is large ({} bytes). This may impact memory usage. "
+                    + "Consider reducing the query scope or using pagination.",
+                    responseBody.length()
+                );
+            }
+
             return response;
         }
     }
