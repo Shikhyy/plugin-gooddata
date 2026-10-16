@@ -36,6 +36,7 @@ import java.util.Collections;
 import java.util.HexFormat;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 
 /**
  * Polling trigger that fires when a GoodData workspace layout or workspace list changes
@@ -240,6 +241,14 @@ public class Trigger extends AbstractTrigger implements PollingTriggerInterface,
         }
     }
 
+    private static final Set<String> VOLATILE_FIELDS = Set.of(
+        "links", "link", "currenttime", "generatedat", "exportedat", "requesttimestamp"
+    );
+
+    public static boolean isVolatileField(String fieldName) {
+        return fieldName != null && VOLATILE_FIELDS.contains(fieldName.toLowerCase());
+    }
+
     private static void canonicalizeNode(JsonNode node, StringBuilder sb) {
         if (node == null || node.isNull()) {
             sb.append("null");
@@ -265,7 +274,11 @@ public class Trigger extends AbstractTrigger implements PollingTriggerInterface,
         } else if (node.isObject()) {
             sb.append("{");
             List<String> fieldNames = new ArrayList<>();
-            node.fieldNames().forEachRemaining(fieldNames::add);
+            node.fieldNames().forEachRemaining(key -> {
+                if (!isVolatileField(key)) {
+                    fieldNames.add(key);
+                }
+            });
             Collections.sort(fieldNames);
             for (int i = 0; i < fieldNames.size(); i++) {
                 if (i > 0) {
