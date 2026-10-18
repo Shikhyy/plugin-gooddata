@@ -1,10 +1,8 @@
 package io.kestra.plugin.gooddata.executions;
 
 import com.fasterxml.jackson.core.type.TypeReference;
-import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.kestra.core.http.HttpRequest;
-import io.kestra.core.http.HttpResponse;
 import io.kestra.core.models.annotations.Example;
 import io.kestra.core.models.annotations.Plugin;
 import io.kestra.core.models.annotations.PluginProperty;
@@ -24,7 +22,7 @@ import org.slf4j.Logger;
 
 import java.io.ByteArrayInputStream;
 import java.net.URI;
-import java.net.URLDecoder;
+import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.List;
@@ -223,9 +221,6 @@ public class Execute extends AbstractGooddata implements RunnableTask<Execute.Ou
             if (rawId.contains("#")) {
                 rawId = rawId.substring(0, rawId.indexOf('#'));
             }
-            try {
-                rawId = URLDecoder.decode(rawId, StandardCharsets.UTF_8);
-            } catch (Exception ignored) {}
 
             rawId = rawId != null ? rawId.trim() : "";
             if (rawId.isBlank() || ".".equals(rawId) || "..".equals(rawId)) {

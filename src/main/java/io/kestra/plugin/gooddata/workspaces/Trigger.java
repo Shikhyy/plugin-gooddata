@@ -3,7 +3,6 @@ package io.kestra.plugin.gooddata.workspaces;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.kestra.core.http.HttpRequest;
-import io.kestra.core.http.HttpResponse;
 import io.kestra.core.models.annotations.Example;
 import io.kestra.core.models.annotations.Plugin;
 import io.kestra.core.models.annotations.PluginProperty;
@@ -17,8 +16,6 @@ import io.kestra.core.models.triggers.TriggerOutput;
 import io.kestra.core.models.triggers.TriggerService;
 import io.kestra.core.runners.RunContext;
 import io.kestra.core.serializers.JacksonMapper;
-import io.kestra.core.storages.kv.KVStore;
-import io.kestra.core.storages.kv.KVValue;
 import io.kestra.core.storages.kv.KVValueAndMetadata;
 import io.kestra.plugin.gooddata.AbstractGooddata;
 import io.swagger.v3.oas.annotations.media.Schema;
@@ -247,8 +244,8 @@ public class Trigger extends AbstractTrigger implements PollingTriggerInterface,
             return "{}";
         }
         try {
-            JsonNode root = MAPPER.readTree(json);
-            StringBuilder sb = new StringBuilder();
+            var root = MAPPER.readTree(json);
+            var sb = new StringBuilder();
             canonicalizeNode(root, sb);
             return sb.toString();
         } catch (Exception e) {
@@ -288,7 +285,7 @@ public class Trigger extends AbstractTrigger implements PollingTriggerInterface,
             sb.append("]");
         } else if (node.isObject()) {
             sb.append("{");
-            List<String> fieldNames = new ArrayList<>();
+            var fieldNames = new ArrayList<String>();
             node.fieldNames().forEachRemaining(key -> {
                 if (!isVolatileField(key)) {
                     fieldNames.add(key);
@@ -299,7 +296,7 @@ public class Trigger extends AbstractTrigger implements PollingTriggerInterface,
                 if (i > 0) {
                     sb.append(",");
                 }
-                String key = fieldNames.get(i);
+                var key = fieldNames.get(i);
                 try {
                     sb.append(MAPPER.writeValueAsString(key));
                 } catch (Exception e) {
