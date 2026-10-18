@@ -36,7 +36,8 @@ import java.nio.charset.StandardCharsets;
     description = """
         Exports the full declarative layout (Logical Data Model + analytics model) \
         of a GoodData workspace by calling `GET /api/v1/layout/workspaces/{workspaceId}`. \
-        The raw JSON is stored as a Kestra internal file.
+        The raw JSON is stored as a Kestra internal file. \
+        Response bodies are limited to 10,000,000 characters (approximately 10 MB).
         """
 )
 @Plugin(

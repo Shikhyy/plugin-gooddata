@@ -36,7 +36,8 @@ import java.nio.charset.StandardCharsets;
     description = """
         Triggers a schema scan on the specified GoodData data source by calling \
         `POST /api/v1/actions/dataSources/{dataSourceId}/scan`. \
-        Returns the number of tables/views discovered and stores the raw scan JSON.
+        Returns the number of tables/views discovered and stores the raw scan JSON. \
+        Response bodies are limited to 10,000,000 characters (approximately 10 MB).
         """
 )
 @Plugin(

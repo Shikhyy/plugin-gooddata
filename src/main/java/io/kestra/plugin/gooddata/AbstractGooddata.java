@@ -274,13 +274,13 @@ public abstract class AbstractGooddata extends Task {
                 );
             }
 
-            // Hard size cap before parsing (KPS-08: prevent memory exhaustion from unbounded response bodies)
+            // Hard size cap after reading (KPS-08: prevent memory exhaustion from unbounded response bodies)
             var responseBody = response.getBody();
             if (responseBody != null && responseBody.length() > MAX_RESPONSE_BODY_CHARS) {
                 throw new IllegalStateException(
                     "GoodData API response body exceeds the maximum permitted limit of "
                     + MAX_RESPONSE_BODY_CHARS + " characters (" + responseBody.length() + " chars). "
-                    + "Request rejected before parsing to prevent memory exhaustion."
+                    + "Request rejected to prevent memory exhaustion."
                 );
             }
 

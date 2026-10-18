@@ -44,7 +44,8 @@ import java.util.concurrent.TimeoutException;
     description = """
         Posts an AFM (Analytical Framework Model) request to \
         `POST /api/v1/actions/workspaces/{workspaceId}/execution/afm/execute`. \
-        Polls the execution result until completion and handles the result according to `fetchType`.
+        Polls the execution result until completion and handles the result according to `fetchType`. \
+        Response bodies are limited to 10,000,000 characters (approximately 10 MB).
         """
 )
 @Plugin(

@@ -2,6 +2,10 @@ This plugin integrates [GoodData](https://www.gooddata.com/) with [Kestra](https
 letting you automate data-source scanning, analytics query execution, declarative workspace layout
 export, and workspace change monitoring as part of your data pipelines.
 
+## Limitations
+
+- **Response body size**: API response bodies are limited to 10,000,000 characters (approximately 10 MB). Responses exceeding this limit will be rejected to prevent memory exhaustion. This applies to all tasks that store or process GoodData API responses (Scan, Execute, Export, WorkspaceList, and Trigger).
+
 ## Authentication
 
 All GoodData tasks and triggers communicate with the GoodData REST API using Bearer-token authentication.
@@ -43,7 +47,7 @@ Executes an AFM (Analytical Framework Model) query against a GoodData workspace 
   - `FETCH`: Returns parsed data rows in `rows`.
   - `FETCH_ONE`: Returns the first data row in `row`.
   - `NONE`: Computes without storing or fetching row data.
-- `pollInterval`: Polling interval between status checks (default: `PT1S`).
+- `pollInterval`: Polling interval between status checks (default: `PT1S`, minimum `PT0.1S`).
 - `maxPollDuration`: Maximum duration to poll for AFM calculation completion (default: `PT60S`).
 - `requestTimeout`: Optional HTTP request timeout duration for individual API calls (default: `PT60S`).
 
@@ -76,7 +80,7 @@ Lists all workspaces accessible to the API token via
 
 **Configuration Options**
 
-- `maxPages`: Maximum number of pagination pages to fetch (minimum `1`, default: `50`).
+- `maxPages`: Maximum number of pagination pages to fetch (minimum `1`, maximum `1000`, default: `50`).
 - `requestTimeout`: Optional HTTP request timeout duration for individual API calls (default: `PT60S`).
 
 **Outputs**
