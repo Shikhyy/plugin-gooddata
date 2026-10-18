@@ -268,7 +268,7 @@ public class GooddataTasksTest {
             .workspaceId(Property.ofValue("sales-workspace"))
             .afmRequest(Property.ofValue("{\"execution\": {}}"))
             .fetchType(Property.ofValue(FetchType.FETCH))
-            .pollInterval(Property.ofValue(Duration.ofMillis(50)))
+            .pollInterval(Property.ofValue(Duration.ofMillis(100)))
             .build();
 
         RunContext runContext = runContextFactory.of();
@@ -396,7 +396,7 @@ public class GooddataTasksTest {
             .workspaceId(Property.ofValue("sales-workspace"))
             .afmRequest(Property.ofValue("{\"execution\": {}}"))
             .maxPollDuration(Property.ofValue(Duration.ofMillis(300)))
-            .pollInterval(Property.ofValue(Duration.ofMillis(50)))
+            .pollInterval(Property.ofValue(Duration.ofMillis(100)))
             .build();
 
         RunContext runContext = runContextFactory.of();
@@ -533,7 +533,7 @@ public class GooddataTasksTest {
             .apiToken(Property.ofValue("test-token"))
             .workspaceId(Property.ofValue("sales-workspace"))
             .afmRequest(Property.ofValue("{\"execution\": {}}"))
-            .pollInterval(Property.ofValue(Duration.ofMillis(50)))
+            .pollInterval(Property.ofValue(Duration.ofMillis(100)))
             .build();
 
         RunContext runContext = runContextFactory.of();
@@ -764,6 +764,36 @@ public class GooddataTasksTest {
         RunContext runContext = runContextFactory.of();
         IllegalArgumentException ex = assertThrows(IllegalArgumentException.class, () -> list.run(runContext));
         assertThat(ex.getMessage(), containsString("'maxPages' must be greater than or equal to 1"));
+    }
+
+    @Test
+    void testListWorkspacesMaxPagesExceedsLimitThrows() {
+        WorkspaceList list = WorkspaceList.builder()
+            .id("list-max-pages-limit")
+            .url(Property.ofValue(serverUrl))
+            .apiToken(Property.ofValue("test-token"))
+            .maxPages(Property.ofValue(1001))
+            .build();
+
+        RunContext runContext = runContextFactory.of();
+        IllegalArgumentException ex = assertThrows(IllegalArgumentException.class, () -> list.run(runContext));
+        assertThat(ex.getMessage(), containsString("'maxPages' must be less than or equal to 1000"));
+    }
+
+    @Test
+    void testExecuteAfmPollIntervalBelowMinimumThrows() {
+        Execute execute = Execute.builder()
+            .id("exec-interval-test")
+            .url(Property.ofValue(serverUrl))
+            .apiToken(Property.ofValue("test-token"))
+            .workspaceId(Property.ofValue("sales-workspace"))
+            .afmRequest(Property.ofValue("{\"execution\": {}}"))
+            .pollInterval(Property.ofValue(Duration.ofMillis(50)))
+            .build();
+
+        RunContext runContext = runContextFactory.of();
+        IllegalArgumentException ex = assertThrows(IllegalArgumentException.class, () -> execute.run(runContext));
+        assertThat(ex.getMessage(), containsString("'pollInterval' must be at least 100 ms"));
     }
 
     @Test
