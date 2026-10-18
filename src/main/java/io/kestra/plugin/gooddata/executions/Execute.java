@@ -16,6 +16,7 @@ import io.kestra.core.serializers.JacksonMapper;
 import io.kestra.plugin.gooddata.AbstractGooddata;
 import io.kestra.plugin.gooddata.GooddataApiException;
 import io.swagger.v3.oas.annotations.media.Schema;
+import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotNull;
 import lombok.*;
 import lombok.experimental.SuperBuilder;
@@ -42,9 +43,11 @@ import java.util.concurrent.TimeoutException;
 @NoArgsConstructor
 @Schema(
     title = "Execute a GoodData AFM analytics query",
-    description = "Posts an AFM (Analytical Framework Model) request to "
-        + "`POST /api/v1/actions/workspaces/{workspaceId}/execution/afm/execute`. "
-        + "Polls the execution result until completion and handles the result according to `fetchType`."
+    description = """
+        Posts an AFM (Analytical Framework Model) request to \
+        `POST /api/v1/actions/workspaces/{workspaceId}/execution/afm/execute`. \
+        Polls the execution result until completion and handles the result according to `fetchType`.
+        """
 )
 @Plugin(
     examples = {
@@ -110,8 +113,10 @@ public class Execute extends AbstractGooddata implements RunnableTask<Execute.Ou
 
     @Schema(
         title = "Fetch type",
-        description = "How to process execution results: STORE (store raw JSON in Kestra storage), "
-            + "FETCH (return all result rows), FETCH_ONE (return first row), or NONE."
+        description = """
+            How to process execution results: STORE (store raw JSON in Kestra storage), \
+            FETCH (return all result rows), FETCH_ONE (return first row), or NONE. Defaults to STORE.
+            """
     )
     @Builder.Default
     @PluginProperty(group = "processing")
@@ -119,15 +124,19 @@ public class Execute extends AbstractGooddata implements RunnableTask<Execute.Ou
 
     @Schema(
         title = "Poll interval",
-        description = "Interval between polling requests when waiting for AFM execution completion."
+        description = """
+            Interval between polling requests when waiting for AFM execution completion. \
+            Defaults to PT1S. Minimum is PT0.1S (100 ms).
+            """
     )
     @Builder.Default
+    @Min(100)
     @PluginProperty(group = "processing")
     private Property<Duration> pollInterval = Property.ofValue(Duration.ofSeconds(1));
 
     @Schema(
         title = "Maximum polling duration",
-        description = "Maximum duration to poll for AFM execution completion before timing out."
+        description = "Maximum duration to poll for AFM execution completion before timing out. Defaults to PT60S."
     )
     @Builder.Default
     @PluginProperty(group = "processing")
@@ -156,6 +165,10 @@ public class Execute extends AbstractGooddata implements RunnableTask<Execute.Ou
         var rPollInterval = this.pollInterval != null
             ? runContext.render(this.pollInterval).as(Duration.class).orElse(Duration.ofSeconds(1))
             : Duration.ofSeconds(1);
+
+        if (rPollInterval.toMillis() < 100) {
+            throw new IllegalArgumentException("'pollInterval' must be at least 100 ms (PT0.1S), got: " + rPollInterval);
+        }
 
         var encodedWsId = encodePath(rWsId);
         var executeUrl = rUrl + "/api/v1/actions/workspaces/" + encodedWsId + "/execution/afm/execute";
@@ -227,7 +240,7 @@ public class Execute extends AbstractGooddata implements RunnableTask<Execute.Ou
 
             var startTime = System.currentTimeMillis();
             var maxDurationMs = rMaxPollDuration.toMillis();
-            var pollIntervalMs = Math.max(100, rPollInterval.toMillis());
+            var pollIntervalMs = rPollInterval.toMillis();
             var attempts = 0;
             String fetchedBody = null;
 
@@ -325,32 +338,42 @@ public class Execute extends AbstractGooddata implements RunnableTask<Execute.Ou
 
         @Schema(
             title = "Execution result ID",
-            description = "The execution result identifier returned by GoodData, "
-                + "extracted from executionResponse.links.executionResult."
+            description = """
+                The execution result identifier returned by GoodData, \
+                extracted from executionResponse.links.executionResult.
+                """
         )
         private final String executionResultId;
 
         @Schema(
             title = "Raw response URI",
-            description = "Kestra internal file URI pointing to the full AFM execute result JSON (when fetchType is STORE)."
+            description = """
+                Kestra internal file URI pointing to the full AFM execute result JSON (when fetchType is STORE).
+                """
         )
         private final URI uri;
 
         @Schema(
             title = "Fetched rows",
-            description = "List of result rows returned by the AFM query (when fetchType is FETCH)."
+            description = """
+                List of result rows returned by the AFM query (when fetchType is FETCH).
+                """
         )
         private final List<Object> rows;
 
         @Schema(
             title = "Single row",
-            description = "First result row returned by the AFM query (when fetchType is FETCH_ONE)."
+            description = """
+                First result row returned by the AFM query (when fetchType is FETCH_ONE).
+                """
         )
         private final Object row;
 
         @Schema(
             title = "Result size",
-            description = "Number of data rows or elements returned in the result."
+            description = """
+                Number of data rows or elements returned in the result.
+                """
         )
         private final Integer size;
     }

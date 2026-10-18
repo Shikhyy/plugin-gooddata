@@ -45,8 +45,10 @@ public abstract class AbstractGooddata extends Task {
 
     @Schema(
         title = "API token",
-        description = "Personal API token for authentication (sent as Authorization: Bearer <token>). "
-            + "Use a Kestra secret expression such as {{ secret('GOODDATA_TOKEN') }}."
+        description = """
+            Personal API token for authentication (sent as Authorization: Bearer <token>). \
+            Use a Kestra secret expression such as {{ secret('GOODDATA_TOKEN') }}.
+            """
     )
     @NotNull
     @PluginProperty(group = "connection", secret = true)
@@ -55,7 +57,7 @@ public abstract class AbstractGooddata extends Task {
 
     @Schema(
         title = "HTTP request timeout",
-        description = "Timeout duration for individual HTTP requests to the GoodData API."
+        description = "Timeout duration for individual HTTP requests to the GoodData API. Defaults to PT60S."
     )
     @Builder.Default
     @PluginProperty(group = "connection")

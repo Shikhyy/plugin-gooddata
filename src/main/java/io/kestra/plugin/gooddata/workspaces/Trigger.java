@@ -50,8 +50,10 @@ import java.util.Set;
 @NoArgsConstructor
 @Schema(
     title = "Trigger on GoodData workspace changes",
-    description = "Polls GoodData for workspace or layout changes. Fires when the layout watermark "
-        + "differs from the previous watermark stored in Kestra's namespace KV Store."
+    description = """
+        Polls GoodData for workspace or layout changes. Fires when the layout watermark \
+        differs from the previous watermark stored in Kestra's namespace KV Store.
+        """
 )
 @Plugin(
     examples = {
@@ -81,7 +83,7 @@ public class Trigger extends AbstractTrigger implements PollingTriggerInterface,
 
     @Schema(
         title = "Polling interval",
-        description = "Interval between poll checks."
+        description = "Interval between poll checks. Defaults to PT5M."
     )
     @Builder.Default
     private Duration interval = Duration.ofMinutes(5);
@@ -96,7 +98,10 @@ public class Trigger extends AbstractTrigger implements PollingTriggerInterface,
 
     @Schema(
         title = "API token",
-        description = "Personal API token for authentication."
+        description = """
+            Personal API token for authentication (sent as Authorization: Bearer <token>). \
+            Use a Kestra secret expression such as {{ secret('GOODDATA_TOKEN') }}.
+            """
     )
     @NotNull
     @PluginProperty(group = "connection", secret = true)
@@ -112,7 +117,7 @@ public class Trigger extends AbstractTrigger implements PollingTriggerInterface,
 
     @Schema(
         title = "HTTP request timeout",
-        description = "Timeout duration for polling HTTP requests."
+        description = "Timeout duration for individual HTTP requests to the GoodData API. Defaults to PT60S."
     )
     @Builder.Default
     @PluginProperty(group = "connection")
