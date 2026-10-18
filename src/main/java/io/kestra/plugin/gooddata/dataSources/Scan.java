@@ -35,9 +35,11 @@ import java.nio.charset.StandardCharsets;
 @NoArgsConstructor
 @Schema(
     title = "Scan a GoodData data source",
-    description = "Triggers a schema scan on the specified GoodData data source by calling "
-        + "`POST /api/v1/actions/dataSources/{dataSourceId}/scan`. "
-        + "Returns the number of tables/views discovered and stores the raw scan JSON."
+    description = """
+        Triggers a schema scan on the specified GoodData data source by calling \
+        `POST /api/v1/actions/dataSources/{dataSourceId}/scan`. \
+        Returns the number of tables/views discovered and stores the raw scan JSON.
+        """
 )
 @Plugin(
     examples = {

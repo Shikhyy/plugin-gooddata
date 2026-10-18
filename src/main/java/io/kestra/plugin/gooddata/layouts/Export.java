@@ -35,9 +35,11 @@ import java.nio.charset.StandardCharsets;
 @NoArgsConstructor
 @Schema(
     title = "Export a GoodData workspace layout",
-    description = "Exports the full declarative layout (Logical Data Model + analytics model) "
-        + "of a GoodData workspace by calling `GET /api/v1/layout/workspaces/{workspaceId}`. "
-        + "The raw JSON is stored as a Kestra internal file."
+    description = """
+        Exports the full declarative layout (Logical Data Model + analytics model) \
+        of a GoodData workspace by calling `GET /api/v1/layout/workspaces/{workspaceId}`. \
+        The raw JSON is stored as a Kestra internal file.
+        """
 )
 @Plugin(
     examples = {
