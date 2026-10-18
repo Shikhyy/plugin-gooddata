@@ -8,6 +8,7 @@ import io.kestra.core.models.tasks.RunnableTask;
 import io.kestra.core.runners.RunContext;
 import io.kestra.plugin.gooddata.AbstractGooddata;
 import io.swagger.v3.oas.annotations.media.Schema;
+import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotNull;
 import lombok.*;
@@ -33,9 +34,11 @@ import java.time.Duration;
 @NoArgsConstructor
 @Schema(
     title = "List GoodData workspaces",
-    description = "Retrieves all workspaces accessible to the configured API token by calling "
-        + "`GET /api/v1/entities/workspaces`. Follows pagination links when multiple pages exist. "
-        + "The raw or aggregated JSON response is stored as a Kestra internal file."
+    description = """
+        Retrieves all workspaces accessible to the configured API token by calling \
+        `GET /api/v1/entities/workspaces`. Follows pagination links when multiple pages exist. \
+        The raw or aggregated JSON response is stored as a Kestra internal file.
+        """
 )
 @Plugin(
     examples = {
@@ -59,10 +62,11 @@ public class WorkspaceList extends AbstractGooddata implements RunnableTask<Work
 
     @Schema(
         title = "Maximum pages",
-        description = "Maximum number of pagination pages to fetch. Must be at least 1. Defaults to 50."
+        description = "Maximum number of pagination pages to fetch. Must be at least 1 and at most 1000. Defaults to 50."
     )
     @NotNull
     @Min(1)
+    @Max(1000)
     @Builder.Default
     @PluginProperty(group = "processing")
     private Property<Integer> maxPages = Property.ofValue(50);
@@ -81,6 +85,9 @@ public class WorkspaceList extends AbstractGooddata implements RunnableTask<Work
 
         if (rMaxPages < 1) {
             throw new IllegalArgumentException("'maxPages' must be greater than or equal to 1, got: " + rMaxPages);
+        }
+        if (rMaxPages > 1000) {
+            throw new IllegalArgumentException("'maxPages' must be less than or equal to 1000, got: " + rMaxPages);
         }
 
         var rRequestTimeout = this.requestTimeout != null
