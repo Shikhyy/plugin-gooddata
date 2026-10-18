@@ -197,7 +197,7 @@ public class Trigger extends AbstractTrigger implements PollingTriggerInterface,
         var namespace = triggerContext.getNamespace();
         var flowId = triggerContext.getFlowId() != null ? triggerContext.getFlowId() : "default";
         var triggerId = triggerContext.getTriggerId() != null ? triggerContext.getTriggerId() : "default";
-        var kvKey = "gooddata_watermark_" + flowId.length() + "_" + flowId + "_" + triggerId + "_" + targetSuffix;
+        var kvKey = "gooddata_watermark_" + flowId.length() + "_" + flowId + "_" + triggerId.length() + "_" + triggerId + "_" + targetSuffix;
 
         var kvStore = runContext.namespaceKv(namespace);
         var previousValue = kvStore.getValue(kvKey);
