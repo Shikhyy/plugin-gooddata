@@ -22,6 +22,7 @@ import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.HashSet;
+import java.util.Set;
 
 /**
  * Abstract base class for all GoodData tasks.
@@ -138,7 +139,7 @@ public abstract class AbstractGooddata extends Task {
         var pageCount = 0;
         var isTruncated = false;
 
-        var visitedUrls = new HashSet<String>();
+        Set<String> visitedUrls = new HashSet<>();
         visitedUrls.add(currentUrl);
 
         while (currentUrl != null && !currentUrl.isBlank()) {
