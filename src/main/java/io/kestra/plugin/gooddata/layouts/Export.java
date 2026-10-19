@@ -101,6 +101,7 @@ public class Export extends AbstractGooddata implements RunnableTask<Export.Outp
         var root = MAPPER.readTree(rawJson);
         var datasetCount = root.path("ldm").path("datasets").size();
         if (datasetCount == 0) {
+            // Defensive fallbacks for early declarative layout schema revisions: workspaceLayout.ldm.datasets, top-level datasets
             datasetCount = root.path("workspaceLayout").path("ldm").path("datasets").size();
             if (datasetCount == 0 && root.has("datasets") && root.path("datasets").isArray()) {
                 datasetCount = root.path("datasets").size();

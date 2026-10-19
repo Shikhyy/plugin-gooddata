@@ -25,7 +25,7 @@ import java.util.HashSet;
 
 /**
  * Abstract base class for all GoodData tasks.
- * Holds shared connection properties (url, apiToken, timeout) and provides common HTTP utilities.
+ * Holds shared connection properties (url, apiToken, requestTimeout) and provides common HTTP utilities.
  */
 @SuperBuilder
 @ToString
@@ -128,15 +128,6 @@ public abstract class AbstractGooddata extends Task {
 
     /**
      * Fetches all workspace pages from GoodData API following pagination links.
-     *
-     * @param runContext the Kestra run context
-     * @param baseUrl the configured GoodData base URL
-     * @param token the API token for authentication
-     * @param timeout the HTTP request timeout
-     * @param maxPages maximum number of pages to fetch
-     * @param logger the logger for debug/warn messages
-     * @return WorkspacePagesResult containing consolidated JSON and truncation flag
-     * @throws Exception if HTTP request fails or origin check fails
      */
     public static WorkspacePagesResult fetchWorkspacePages(
         RunContext runContext,

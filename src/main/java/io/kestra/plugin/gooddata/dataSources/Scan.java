@@ -104,10 +104,10 @@ public class Scan extends AbstractGooddata implements RunnableTask<Scan.Output> 
         // Reference: GoodData Cloud OpenAPI - POST /api/v1/actions/dataSources/{dataSourceId}/scan
         // https://www.gooddata.com/docs/cloud/api-and-sdk/api/api-reference/#tag/Actions:-Data-Source-Operations/operation/scanDataSource
         // Schema: ScanResultPdm -> pdm.tables
-        // Defensive fallbacks for self-hosted GoodData.CN (v2.x) and early declarative previews: pdm.datasets, tables, data
         var root = MAPPER.readTree(rawJson);
         var tablesFound = root.path("pdm").path("tables").size();
         if (tablesFound == 0) {
+            // Defensive fallbacks for self-hosted GoodData.CN (v2.x) and early declarative previews: pdm.datasets, tables, data
             tablesFound = root.path("pdm").path("datasets").size();
             if (tablesFound == 0) {
                 tablesFound = root.path("tables").size();
