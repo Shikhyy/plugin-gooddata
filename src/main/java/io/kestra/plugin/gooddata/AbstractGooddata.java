@@ -99,9 +99,6 @@ public abstract class AbstractGooddata extends Task {
         }
     }
 
-    /**
-     * Result class for workspace pagination operations.
-     */
     public static class WorkspacePagesResult {
         private final String consolidatedJson;
         private final boolean truncated;
@@ -126,9 +123,6 @@ public abstract class AbstractGooddata extends Task {
         }
     }
 
-    /**
-     * Fetches all workspace pages from GoodData API following pagination links.
-     */
     public static WorkspacePagesResult fetchWorkspacePages(
         RunContext runContext,
         String baseUrl,
