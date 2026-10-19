@@ -14,7 +14,6 @@ import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotNull;
 import lombok.*;
 import lombok.experimental.SuperBuilder;
-import org.slf4j.Logger;
 
 import java.io.ByteArrayInputStream;
 import java.net.URI;
@@ -99,11 +98,9 @@ public class Export extends AbstractGooddata implements RunnableTask<Export.Outp
         // Reference: GoodData Cloud OpenAPI - GET /api/v1/layout/workspaces/{workspaceId}
         // https://www.gooddata.com/docs/cloud/api-and-sdk/api/api-reference/#tag/Declarative-Layouts:-Workspaces/operation/getWorkspaceLayout
         // Schema: DeclarativeWorkspace -> ldm.datasets
-        // Defensive fallbacks for early declarative layout schema revisions: workspaceLayout.ldm.datasets, top-level datasets
         var root = MAPPER.readTree(rawJson);
         var datasetCount = root.path("ldm").path("datasets").size();
         if (datasetCount == 0) {
-            // Fallback: workspaceLayout.ldm.datasets
             datasetCount = root.path("workspaceLayout").path("ldm").path("datasets").size();
             if (datasetCount == 0 && root.has("datasets") && root.path("datasets").isArray()) {
                 datasetCount = root.path("datasets").size();

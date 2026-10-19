@@ -13,7 +13,6 @@ import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotNull;
 import lombok.*;
 import lombok.experimental.SuperBuilder;
-import org.slf4j.Logger;
 
 import java.io.ByteArrayInputStream;
 import java.net.URI;
@@ -65,11 +64,9 @@ public class WorkspaceList extends AbstractGooddata implements RunnableTask<Work
         description = "Maximum number of pagination pages to fetch. Must be at least 1 and at most 1000. Defaults to 50."
     )
     @NotNull
-    @Min(1)
-    @Max(1000)
     @Builder.Default
     @PluginProperty(group = "processing")
-    private Property<Integer> maxPages = Property.ofValue(50);
+    private Property<@Min(1) @Max(1000) Integer> maxPages = Property.ofValue(50);
 
     @Override
     public WorkspaceList.Output run(RunContext runContext) throws Exception {

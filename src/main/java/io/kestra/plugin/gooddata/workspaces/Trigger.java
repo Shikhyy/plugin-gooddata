@@ -14,7 +14,6 @@ import io.kestra.core.models.triggers.PollingTriggerInterface;
 import io.kestra.core.models.triggers.TriggerContext;
 import io.kestra.core.models.triggers.TriggerOutput;
 import io.kestra.core.models.triggers.TriggerService;
-import io.kestra.core.runners.RunContext;
 import io.kestra.core.serializers.JacksonMapper;
 import io.kestra.core.storages.kv.KVValueAndMetadata;
 import io.kestra.plugin.gooddata.AbstractGooddata;
@@ -22,7 +21,6 @@ import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotNull;
 import lombok.*;
 import lombok.experimental.SuperBuilder;
-import org.slf4j.Logger;
 
 import java.io.ByteArrayInputStream;
 import java.net.URI;
@@ -83,6 +81,7 @@ public class Trigger extends AbstractTrigger implements PollingTriggerInterface,
         description = "Interval between poll checks. Defaults to PT5M."
     )
     @Builder.Default
+    @PluginProperty(group = "processing")
     private Duration interval = Duration.ofMinutes(5);
 
     @Schema(
@@ -203,7 +202,6 @@ public class Trigger extends AbstractTrigger implements PollingTriggerInterface,
         var previousValue = kvStore.getValue(kvKey);
 
         if (previousValue.isEmpty()) {
-            // First poll: seed watermark
             kvStore.put(kvKey, new KVValueAndMetadata(null, currentWatermark));
             if (!rOnStartup) {
                 logger.info("Initialized GoodData watermark for {} to {}. Skipping initial execution.", kvKey, currentWatermark);

@@ -14,7 +14,6 @@ import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotNull;
 import lombok.*;
 import lombok.experimental.SuperBuilder;
-import org.slf4j.Logger;
 
 import java.io.ByteArrayInputStream;
 import java.net.URI;
@@ -105,11 +104,9 @@ public class Scan extends AbstractGooddata implements RunnableTask<Scan.Output> 
         // Reference: GoodData Cloud OpenAPI - POST /api/v1/actions/dataSources/{dataSourceId}/scan
         // https://www.gooddata.com/docs/cloud/api-and-sdk/api/api-reference/#tag/Actions:-Data-Source-Operations/operation/scanDataSource
         // Schema: ScanResultPdm -> pdm.tables
-        // Defensive fallbacks for self-hosted GoodData.CN (v2.x) and early declarative previews: pdm.datasets, tables, data
         var root = MAPPER.readTree(rawJson);
         var tablesFound = root.path("pdm").path("tables").size();
         if (tablesFound == 0) {
-            // Fallback: try "pdm.datasets" or top-level "tables"
             tablesFound = root.path("pdm").path("datasets").size();
             if (tablesFound == 0) {
                 tablesFound = root.path("tables").size();

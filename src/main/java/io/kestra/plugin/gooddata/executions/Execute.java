@@ -14,15 +14,12 @@ import io.kestra.core.serializers.JacksonMapper;
 import io.kestra.plugin.gooddata.AbstractGooddata;
 import io.kestra.plugin.gooddata.GooddataApiException;
 import io.swagger.v3.oas.annotations.media.Schema;
-import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotNull;
 import lombok.*;
 import lombok.experimental.SuperBuilder;
-import org.slf4j.Logger;
 
 import java.io.ByteArrayInputStream;
 import java.net.URI;
-import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.List;
@@ -129,7 +126,6 @@ public class Execute extends AbstractGooddata implements RunnableTask<Execute.Ou
             """
     )
     @Builder.Default
-    @Min(100)
     @PluginProperty(group = "processing")
     private Property<Duration> pollInterval = Property.ofValue(Duration.ofSeconds(1));
 
