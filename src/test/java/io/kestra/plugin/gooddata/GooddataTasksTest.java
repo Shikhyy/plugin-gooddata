@@ -13,6 +13,7 @@ import io.kestra.core.runners.DefaultRunContext;
 import io.kestra.core.runners.RunContext;
 import io.kestra.core.runners.RunContextFactory;
 import io.kestra.core.utils.IdUtils;
+import io.kestra.core.models.validations.ModelValidator;
 import io.kestra.plugin.gooddata.dataSources.Scan;
 import io.kestra.plugin.gooddata.executions.Execute;
 import io.kestra.plugin.gooddata.layouts.Export;
@@ -38,6 +39,9 @@ public class GooddataTasksTest {
 
     @Inject
     protected RunContextFactory runContextFactory;
+
+    @Inject
+    protected ModelValidator modelValidator;
 
     private WireMockServer wireMockServer;
     private String serverUrl;
@@ -879,5 +883,26 @@ public class GooddataTasksTest {
         RunContext runContext = runContextFactory.of();
         IllegalStateException ex = assertThrows(IllegalStateException.class, () -> export.run(runContext));
         assertThat(ex.getMessage(), containsString("exceeds the maximum permitted limit"));
+    }
+
+    @Test
+    void testModelValidatorAcceptsDefaultTasks() {
+        var execute = Execute.builder()
+            .id("execute-default")
+            .type(Execute.class.getName())
+            .url(Property.ofValue(serverUrl))
+            .apiToken(Property.ofValue("test-token"))
+            .workspaceId(Property.ofValue("ws1"))
+            .afmRequest(Property.ofValue("{}"))
+            .build();
+        modelValidator.validate(execute);
+
+        var workspaceList = WorkspaceList.builder()
+            .id("list-default")
+            .type(WorkspaceList.class.getName())
+            .url(Property.ofValue(serverUrl))
+            .apiToken(Property.ofValue("test-token"))
+            .build();
+        modelValidator.validate(workspaceList);
     }
 }

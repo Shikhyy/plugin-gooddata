@@ -14,18 +14,11 @@ import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotNull;
 import lombok.*;
 import lombok.experimental.SuperBuilder;
-import org.slf4j.Logger;
 
 import java.io.ByteArrayInputStream;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
 
-/**
- * Kestra task that triggers a schema scan on a GoodData data source.
- *
- * <p>Calls {@code POST /api/v1/actions/dataSources/{dataSourceId}/scan} with an empty
- * JSON body, stores the raw scan JSON, and returns the number of discovered tables.</p>
- */
 @SuperBuilder
 @ToString
 @EqualsAndHashCode(callSuper = true)

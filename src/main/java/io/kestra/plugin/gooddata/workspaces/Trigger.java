@@ -14,7 +14,6 @@ import io.kestra.core.models.triggers.PollingTriggerInterface;
 import io.kestra.core.models.triggers.TriggerContext;
 import io.kestra.core.models.triggers.TriggerOutput;
 import io.kestra.core.models.triggers.TriggerService;
-import io.kestra.core.runners.RunContext;
 import io.kestra.core.serializers.JacksonMapper;
 import io.kestra.core.storages.kv.KVValueAndMetadata;
 import io.kestra.plugin.gooddata.AbstractGooddata;
@@ -22,7 +21,6 @@ import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotNull;
 import lombok.*;
 import lombok.experimental.SuperBuilder;
-import org.slf4j.Logger;
 
 import java.io.ByteArrayInputStream;
 import java.net.URI;
@@ -35,10 +33,6 @@ import java.util.HexFormat;
 import java.util.Optional;
 import java.util.Set;
 
-/**
- * Polling trigger that fires when a GoodData workspace layout or workspace list changes
- * relative to the persisted watermark in Kestra's namespace KV Store.
- */
 @SuperBuilder
 @ToString
 @EqualsAndHashCode(callSuper = true)

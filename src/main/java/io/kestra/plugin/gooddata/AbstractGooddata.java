@@ -22,12 +22,7 @@ import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.HashSet;
-import java.util.Set;
 
-/**
- * Abstract base class for all GoodData tasks.
- * Holds shared connection properties (url, apiToken, requestTimeout) and provides common HTTP utilities.
- */
 @SuperBuilder
 @ToString
 @EqualsAndHashCode(callSuper = true)
@@ -81,10 +76,6 @@ public abstract class AbstractGooddata extends Task {
         return trimmed.replaceAll("/+$", "");
     }
 
-    /**
-     * Asserts that a link URI has the same origin (scheme, host, and port) as the configured base URL.
-     * Throws SecurityException if the origins differ.
-     */
     public static void assertSameOrigin(URI link, String baseUrl) {
         var baseUri = URI.create(baseUrl);
         var basePort = baseUri.getPort() != -1 ? baseUri.getPort() : ("https".equalsIgnoreCase(baseUri.getScheme()) ? 443 : 80);
@@ -139,7 +130,7 @@ public abstract class AbstractGooddata extends Task {
         var pageCount = 0;
         var isTruncated = false;
 
-        Set<String> visitedUrls = new HashSet<>();
+        var visitedUrls = new HashSet<String>();
         visitedUrls.add(currentUrl);
 
         while (currentUrl != null && !currentUrl.isBlank()) {

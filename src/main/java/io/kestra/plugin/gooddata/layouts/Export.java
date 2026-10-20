@@ -14,18 +14,11 @@ import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotNull;
 import lombok.*;
 import lombok.experimental.SuperBuilder;
-import org.slf4j.Logger;
 
 import java.io.ByteArrayInputStream;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
 
-/**
- * Kestra task that exports the full declarative workspace layout from GoodData.
- *
- * <p>Calls {@code GET /api/v1/layout/workspaces/{workspaceId}} with Bearer-token auth,
- * stores the raw JSON layout, and returns the count of LDM datasets.</p>
- */
 @SuperBuilder
 @ToString
 @EqualsAndHashCode(callSuper = true)

@@ -17,7 +17,6 @@ import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotNull;
 import lombok.*;
 import lombok.experimental.SuperBuilder;
-import org.slf4j.Logger;
 
 import java.io.ByteArrayInputStream;
 import java.net.URI;
@@ -26,12 +25,6 @@ import java.time.Duration;
 import java.util.List;
 import java.util.concurrent.TimeoutException;
 
-/**
- * Kestra task that executes an AFM (Analytical Framework Model) query against a GoodData workspace.
- *
- * <p>Posts the AFM query to GoodData, polls the resulting executionResult endpoint until complete,
- * and fetches or stores the computed tabular result according to the configured {@code fetchType}.</p>
- */
 @SuperBuilder
 @ToString
 @EqualsAndHashCode(callSuper = true)

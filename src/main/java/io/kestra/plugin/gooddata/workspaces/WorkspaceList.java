@@ -13,20 +13,12 @@ import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotNull;
 import lombok.*;
 import lombok.experimental.SuperBuilder;
-import org.slf4j.Logger;
 
 import java.io.ByteArrayInputStream;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 
-/**
- * Kestra task that lists all GoodData workspaces accessible by the API token.
- *
- * <p>Calls {@code GET /api/v1/entities/workspaces} with Bearer-token auth, follows
- * pagination links ({@code links.next}) when present, stores the consolidated JSON response
- * as a Kestra internal file, and returns the workspace count.</p>
- */
 @SuperBuilder
 @ToString
 @EqualsAndHashCode(callSuper = true)
