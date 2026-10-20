@@ -134,9 +134,8 @@ public class Trigger extends AbstractTrigger implements PollingTriggerInterface,
         var runContext = conditionContext.getRunContext();
         var logger = runContext.logger();
 
-        var rawUrl = runContext.render(url).as(String.class).orElseThrow(
-            () -> new IllegalArgumentException("'url' must be provided"));
-        var rUrl = AbstractGooddata.validateAndNormalizeUrl(rawUrl);
+        var rUrl = AbstractGooddata.validateAndNormalizeUrl(runContext.render(url).as(String.class).orElseThrow(
+            () -> new IllegalArgumentException("'url' must be provided")));
         var rToken = runContext.render(apiToken).as(String.class).orElseThrow(
             () -> new IllegalArgumentException("'apiToken' must be provided"));
         var rWsId = workspaceId != null ? runContext.render(workspaceId).as(String.class).orElse(null) : null;
@@ -269,11 +268,13 @@ public class Trigger extends AbstractTrigger implements PollingTriggerInterface,
             }
         } else if (node.isArray()) {
             sb.append("[");
-            for (int i = 0; i < node.size(); i++) {
-                if (i > 0) {
+            var first = true;
+            for (var element : node) {
+                if (!first) {
                     sb.append(",");
                 }
-                canonicalizeNode(node.get(i), sb);
+                first = false;
+                canonicalizeNode(element, sb);
             }
             sb.append("]");
         } else if (node.isObject()) {
@@ -285,11 +286,12 @@ public class Trigger extends AbstractTrigger implements PollingTriggerInterface,
                 }
             });
             Collections.sort(fieldNames);
-            for (int i = 0; i < fieldNames.size(); i++) {
-                if (i > 0) {
+            var first = true;
+            for (var key : fieldNames) {
+                if (!first) {
                     sb.append(",");
                 }
-                var key = fieldNames.get(i);
+                first = false;
                 try {
                     sb.append(MAPPER.writeValueAsString(key));
                 } catch (Exception e) {
