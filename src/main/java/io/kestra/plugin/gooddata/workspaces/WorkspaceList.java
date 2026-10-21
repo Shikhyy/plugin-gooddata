@@ -29,7 +29,8 @@ import java.time.Duration;
     description = """
         Retrieves all workspaces accessible to the configured API token by calling \
         `GET /api/v1/entities/workspaces`. Follows pagination links when multiple pages exist. \
-        The raw or aggregated JSON response is stored as a Kestra internal file.
+        The raw or aggregated JSON response is stored as a Kestra internal file. \
+        Each response page is limited to 10,000,000 characters (approximately 10 MB).
         """
 )
 @Plugin(

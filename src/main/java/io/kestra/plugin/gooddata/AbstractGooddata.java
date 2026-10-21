@@ -256,7 +256,9 @@ public abstract class AbstractGooddata extends Task {
                 throw new IllegalStateException(
                     "GoodData API response body exceeds the maximum permitted limit of "
                     + MAX_RESPONSE_BODY_CHARS + " characters (" + responseBody.length() + " chars). "
-                    + "Request rejected to prevent memory exhaustion."
+                    + "Request rejected to prevent memory exhaustion. "
+                    + "Narrow the request (for example, fewer attributes or tighter filters in the AFM request) "
+                    + "or reduce the size of the exported workspace."
                 );
             }
 

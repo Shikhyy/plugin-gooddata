@@ -4,7 +4,8 @@ export, and workspace change monitoring as part of your data pipelines.
 
 ## Limitations
 
-- **Response body size**: API response bodies are limited to 10,000,000 characters (approximately 10 MB). Responses exceeding this limit will be rejected to prevent memory exhaustion. This applies to all tasks that store or process GoodData API responses (Scan, Execute, Export, WorkspaceList, and Trigger).
+- **Response body size**: each GoodData API response is limited to 10,000,000 characters (approximately 10 MB). The limit applies to every task and to the trigger (`Scan`, `Execute`, `Export`, `WorkspaceList` and `Trigger`), and is checked per HTTP response, so for `WorkspaceList` and the tenant-wide `Trigger` it applies to each page. The response is read in full before the check, so the limit bounds the parsing and storage steps that follow, not the read itself. A response over the limit fails the task or trigger evaluation.
+  To stay under it, narrow the AFM request in `Execute` (fewer attributes, measures, or tighter filters), or split a large workspace before running `Export`.
 
 ## Authentication
 

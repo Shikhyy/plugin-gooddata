@@ -42,7 +42,8 @@ import java.util.Set;
     title = "Trigger on GoodData workspace changes",
     description = """
         Polls GoodData for workspace or layout changes. Fires when the layout watermark \
-        differs from the previous watermark stored in Kestra's namespace KV Store.
+        differs from the previous watermark stored in Kestra's namespace KV Store. \
+        Each GoodData API response is limited to 10,000,000 characters (approximately 10 MB).
         """
 )
 @Plugin(
